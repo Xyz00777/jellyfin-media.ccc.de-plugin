@@ -1,0 +1,1 @@
+global using Jellyfin.Plugin.MediaCccDe.Services;

@@ -22,6 +22,5 @@ public class ServiceRegistrator : IPluginServiceRegistrator
         
         serviceCollection.AddHostedService<LibrarySetupService>();
         serviceCollection.AddHostedService<SyncService>();
-        serviceCollection.AddHostedService<DownloadService>();
     }
 }

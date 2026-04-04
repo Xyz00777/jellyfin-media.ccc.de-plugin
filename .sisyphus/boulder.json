@@ -43,7 +43,10 @@
     "ses_2a5c379fdffeDLmnPKqJ2NDAVu",
     "ses_2a5c38010ffeq08Rhg9WPKTWeF",
     "ses_2a5c5b894ffeXzZVrqhoOBAvyJ",
-    "ses_2a5c545ceffeYoWj0MhOhHxe6E"
+    "ses_2a5c545ceffeYoWj0MhOhHxe6E",
+    "ses_2a5bd0110ffe1zE4VNHWcSWyjw",
+    "ses_2a5b8cde1ffec9562oxfzfXNu0",
+    "ses_2a5b924b6ffeGsOOhXnKvU8yqm"
   ],
   "plan_name": "ccc-media-plugin-tdd",
   "current_wave": 4,
@@ -62,6 +65,11 @@
     "status": "completed",
     "completed_at": "2026-04-05T02:30:00.000Z",
     "commit": "783601e"
+  },
+  "wave_4_red": {
+    "status": "completed",
+    "completed_at": "2026-04-04T21:15:00.000Z",
+    "commit": "5981d43"
   },
   "task_sessions": {}
 }

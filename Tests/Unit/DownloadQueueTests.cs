@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Models;
+using Jellyfin.Plugin.MediaCccDe.Services;
 using MediaBrowser.Common.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -28,7 +29,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             _applicationPathsMock = new Mock<IApplicationPaths>(MockBehavior.Strict);
             _loggerMock = new Mock<ILogger<DownloadQueue>>(MockBehavior.Loose);
             _testDataPath = Path.Combine(Path.GetTempPath(), "ccc-media-tests", Guid.NewGuid().ToString());
-            _applicationPathsMock.Setup(x => x.DataFolderPath).Returns(_testDataPath);
+            _applicationPathsMock.Setup(x => x.DataPath).Returns(_testDataPath);
             _queue = new DownloadQueue(_applicationPathsMock.Object, _loggerMock.Object);
         }
 

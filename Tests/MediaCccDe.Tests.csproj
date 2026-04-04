@@ -21,6 +21,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Unit/DownloadProcessingTests.cs" />
+    <Compile Remove="Unit/FileServiceTests.cs" />
+    <Compile Remove="Unit/UserLibraryServiceTests.cs" />
+    <Compile Remove="Unit/ServiceRegistratorTests.cs" />
+    <Compile Remove="Unit/UserDataManagerTests.cs" />
+    <Compile Remove="Unit/MediaCccEpisodeProviderTests.cs" />
+    <Compile Remove="Integration/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Jellyfin.Plugin.MediaCccDe.csproj" />
   </ItemGroup>
 

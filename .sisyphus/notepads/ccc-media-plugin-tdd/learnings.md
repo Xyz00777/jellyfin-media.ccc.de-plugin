@@ -199,3 +199,33 @@
 - `MediaBrowser.Model.Configuration` - LibraryOptions
 - `MediaBrowser.Model.Plugins` - BasePluginConfiguration
 - `Microsoft.Extensions.Hosting` - IHostedService
+
+## Task 39: UserDataManager Implementation (2026-04-04)
+
+### Model Created
+- `Models/UserData.cs` - User data container with Watchlist, SearchProgress, PreferredAudioLanguages, PreferredSubtitleLanguages, CreatedAt, UpdatedAt
+
+### Interface Created
+- `Services/IUserDataManager.cs` - Full contract for user data management
+
+### Implementation
+- Thread-safe with `lock(_lock)` around all public methods
+- In-memory cache `Dictionary<Guid, UserData>` for fast access
+- JSON persistence at `{DataPath}/plugins/ccc-media/data/user-{guid}.json`
+- Graceful handling of missing/corrupt JSON files (logs warning, returns empty data)
+- Directory creation with `Directory.CreateDirectory()` before saving
+- Timestamp management: CreatedAt set on first save, UpdatedAt updated on each modification
+
+### Key Patterns
+- `GetOrCreateUserData(userId)` - ensures user data exists in cache
+- `GetUserFilePath(userId)` - standardized path for user JSON files
+- Returning copies from getter methods to prevent external mutation
+
+### Path Format
+- `{DataPath}/plugins/ccc-media/data/user-{guid}.json`
+- Following same pattern as SyncLogger (logs at `sync-logs.json`)
+
+### Build Status
+- Implementation compiles correctly
+- Other test files (DownloadProcessing, FileService, DownloadQueue, UserLibraryService) have pre-existing errors from unfinished TDD tasks
+- UserDataManager tests will run once other tasks are complete

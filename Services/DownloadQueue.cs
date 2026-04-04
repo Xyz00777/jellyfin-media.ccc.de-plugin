@@ -1,0 +1,245 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using Jellyfin.Plugin.MediaCccDe.Models;
+using MediaBrowser.Common.Configuration;
+using Microsoft.Extensions.Logging;
+
+namespace Jellyfin.Plugin.MediaCccDe.Services
+{
+    public class DownloadQueue : IDownloadQueue
+    {
+        private readonly IApplicationPaths _applicationPaths;
+        private readonly ILogger<DownloadQueue> _logger;
+        private readonly object _lock = new object();
+        private readonly Dictionary<Guid, DownloadQueueItem> _queue = new Dictionary<Guid, DownloadQueueItem>();
+
+        public DownloadQueue(IApplicationPaths applicationPaths, ILogger<DownloadQueue> logger)
+        {
+            _applicationPaths = applicationPaths;
+            _logger = logger;
+            LoadAsync().GetAwaiter().GetResult();
+        }
+
+        public async Task EnqueueAsync(DownloadQueueItem item)
+        {
+            lock (_lock)
+            {
+                var existingItem = _queue.Values.FirstOrDefault(i =>
+                    i.EventGuid == item.EventGuid && i.UserId == item.UserId);
+
+                if (existingItem != null)
+                {
+                    return;
+                }
+
+                if (item.CreatedAt == default)
+                {
+                    item.CreatedAt = DateTime.UtcNow;
+                }
+
+                if (item.UpdatedAt == default)
+                {
+                    item.UpdatedAt = DateTime.UtcNow;
+                }
+
+                _queue[item.Id] = item;
+            }
+
+            await PersistAsync().ConfigureAwait(false);
+        }
+
+        public async Task<DownloadQueueItem?> DequeueAsync()
+        {
+            DownloadQueueItem? nextItem;
+            lock (_lock)
+            {
+                nextItem = _queue.Values
+                    .Where(i => i.Status == DownloadStatus.Pending)
+                    .OrderBy(i => i.Priority)
+                    .ThenBy(i => i.CreatedAt)
+                    .FirstOrDefault();
+
+                if (nextItem == null)
+                {
+                    return null;
+                }
+
+                nextItem.Status = DownloadStatus.InProgress;
+                nextItem.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await PersistAsync().ConfigureAwait(false);
+            return nextItem;
+        }
+
+        public Task<DownloadQueueItem?> GetItemAsync(Guid id)
+        {
+            lock (_lock)
+            {
+                _queue.TryGetValue(id, out var item);
+                return Task.FromResult(item);
+            }
+        }
+
+        public Task<IEnumerable<DownloadQueueItem>> GetUserQueueAsync(Guid userId)
+        {
+            lock (_lock)
+            {
+                return Task.FromResult(_queue.Values.Where(i => i.UserId == userId).ToList().AsEnumerable());
+            }
+        }
+
+        public async Task MarkInProgressAsync(Guid id)
+        {
+            lock (_lock)
+            {
+                if (_queue.TryGetValue(id, out var item))
+                {
+                    item.Status = DownloadStatus.InProgress;
+                    item.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            await PersistAsync().ConfigureAwait(false);
+        }
+
+        public async Task MarkCompletedAsync(Guid id)
+        {
+            lock (_lock)
+            {
+                if (_queue.TryGetValue(id, out var item))
+                {
+                    item.Status = DownloadStatus.Completed;
+                    item.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            await PersistAsync().ConfigureAwait(false);
+        }
+
+        public async Task MarkFailedAsync(Guid id, string errorMessage)
+        {
+            lock (_lock)
+            {
+                if (_queue.TryGetValue(id, out var item))
+                {
+                    item.Status = DownloadStatus.Failed;
+                    item.ErrorMessage = errorMessage;
+                    item.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            await PersistAsync().ConfigureAwait(false);
+        }
+
+        public async Task UpdateProgressAsync(Guid id, double progress)
+        {
+            lock (_lock)
+            {
+                if (_queue.TryGetValue(id, out var item))
+                {
+                    item.Progress = progress;
+                    item.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+
+            await PersistAsync().ConfigureAwait(false);
+        }
+
+        public Task<int> GetQueueLengthAsync()
+        {
+            lock (_lock)
+            {
+                return Task.FromResult(_queue.Count);
+            }
+        }
+
+        public async Task RemoveAsync(Guid id)
+        {
+            lock (_lock)
+            {
+                _queue.Remove(id);
+            }
+
+            await PersistAsync().ConfigureAwait(false);
+        }
+
+        private async Task PersistAsync()
+        {
+            string filePath;
+            lock (_lock)
+            {
+                filePath = GetFilePath();
+                var directory = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+            }
+
+            List<DownloadQueueItem> itemsToSave;
+            lock (_lock)
+            {
+                itemsToSave = _queue.Values.ToList();
+            }
+
+            var json = JsonSerializer.Serialize(itemsToSave, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+
+            await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
+        }
+
+        private async Task LoadAsync()
+        {
+            var filePath = GetFilePath();
+
+            if (!File.Exists(filePath))
+            {
+                lock (_lock)
+                {
+                    _queue.Clear();
+                }
+                return;
+            }
+
+            try
+            {
+                var json = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
+                var items = JsonSerializer.Deserialize<List<DownloadQueueItem>>(json);
+
+                lock (_lock)
+                {
+                    _queue.Clear();
+                    if (items != null)
+                    {
+                        foreach (var item in items)
+                        {
+                            _queue[item.Id] = item;
+                        }
+                    }
+                }
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse download queue from {FilePath}. Starting with empty queue.", filePath);
+
+                lock (_lock)
+                {
+                    _queue.Clear();
+                }
+            }
+        }
+
+        private string GetFilePath()
+        {
+            return Path.Combine(_applicationPaths.DataPath, "plugins", "ccc-media", "data", "download-queue.json");
+        }
+    }
+}
