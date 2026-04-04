@@ -10,10 +10,27 @@
     "ses_2a65d494cffeJev6DBdzyMfraM",
     "ses_2a65d5ba5ffeDyh67j7m13yusp",
     "ses_2a654669affeEg1bLT1Xyelefv",
-    "ses_2a6597cf0ffeWcwH2aie0lMxDq"
+    "ses_2a6597cf0ffeWcwH2aie0lMxDq",
+    "ses_2a640932bffexleIsaOrwAX70S",
+    "ses_2a640adcdffeCLrgVyJzrOIWDs",
+    "ses_2a6401165ffeYegnjT8qcc7joc",
+    "ses_2a64037caffemesNSL5edLiesu",
+    "ses_2a63f595affekR8dvT2xEN1fmP",
+    "ses_2a63ecb67ffeGWYSIbZKlfaN9Y",
+    "ses_2a63c7b85ffeFC6wACvrGIUj00",
+    "ses_2a63bb5bdffenhrAaR46VqYkdN",
+    "ses_2a634632affeTt652ExZRIFvFP",
+    "ses_2a63eab58ffe03xRNsCddXHhoo",
+    "ses_2a63bd033ffeydR31436wGX16o",
+    "ses_2a63aa42cffe1fxrU6NfkDNo1t"
   ],
   "plan_name": "ccc-media-plugin-tdd",
-  "current_wave": 1,
-  "current_task": 1,
+  "current_wave": 2,
+  "current_task": 8,
+  "wave_1": {
+    "status": "completed",
+    "completed_at": "2026-04-04T18:15:00.000Z",
+    "commit": "ec749f4"
+  },
   "task_sessions": {}
 }

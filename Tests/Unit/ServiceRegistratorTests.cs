@@ -25,7 +25,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
             
             // Assert
-            var descriptor = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(MediaCccApi));
+            var descriptor = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(IMediaCccApiClient));
             Assert.NotNull(descriptor);
             Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
         }

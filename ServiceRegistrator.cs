@@ -17,7 +17,7 @@ public class ServiceRegistrator : IPluginServiceRegistrator
             client.Timeout = TimeSpan.FromSeconds(30);
         });
         
-        serviceCollection.AddSingleton<MediaCccApi>();
+        serviceCollection.AddSingleton<IMediaCccApiClient, MediaCccApi>();
         serviceCollection.AddSingleton<UserDataManager>();
         
         serviceCollection.AddHostedService<LibrarySetupService>();
