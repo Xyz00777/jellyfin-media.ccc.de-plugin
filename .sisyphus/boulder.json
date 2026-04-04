@@ -1,0 +1,19 @@
+{
+  "active_plan": "/opt/syncthing/sync/ncc1031/git/jellyfin_ccc-media-de/.sisyphus/plans/ccc-media-plugin-tdd.md",
+  "started_at": "2026-04-04T16:03:05.360Z",
+  "session_ids": [
+    "ses_2ab0cc475ffeqzQ0322CQclFI0",
+    "ses_2a65d7fe1ffeim5lqsZdGsKjr3",
+    "ses_2a65dd670ffe5wMirPMAXukWJT",
+    "ses_2a65dba77ffeWHGc6EYhp4payT",
+    "ses_2a659e10bffenNWdKfysXQRt6u",
+    "ses_2a65d494cffeJev6DBdzyMfraM",
+    "ses_2a65d5ba5ffeDyh67j7m13yusp",
+    "ses_2a654669affeEg1bLT1Xyelefv",
+    "ses_2a6597cf0ffeWcwH2aie0lMxDq"
+  ],
+  "plan_name": "ccc-media-plugin-tdd",
+  "current_wave": 1,
+  "current_task": 1,
+  "task_sessions": {}
+}
