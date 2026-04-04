@@ -22,15 +22,46 @@
     "ses_2a634632affeTt652ExZRIFvFP",
     "ses_2a63eab58ffe03xRNsCddXHhoo",
     "ses_2a63bd033ffeydR31436wGX16o",
-    "ses_2a63aa42cffe1fxrU6NfkDNo1t"
+    "ses_2a63aa42cffe1fxrU6NfkDNo1t",
+    "ses_2a620c122ffeSiqYhakAqonpug",
+    "ses_2a62087a9ffeYOT9TETjJLNYQK",
+    "ses_2a62051caffeCDqbn7FE60zU5B",
+    "ses_2a620a2d3ffe3hBS3zkppCin5H",
+    "ses_2a61bbf33ffen6VxHUrq2BuN17",
+    "ses_2a61c47d0ffentDwdjTZwPKzDR",
+    "ses_2a62063b0ffelUJLOnAD5CQAmQ",
+    "ses_2a615aa5affeXppUyNPk7AyQZe",
+    "ses_2a615efa1ffeSHrvyX41bSqfpK",
+    "ses_2a61605c6ffe4M5J4RKHOo1dm2",
+    "ses_2a615c28fffeaNrMpUfTjigSZ7",
+    "ses_2a6072fd3ffeGGVPoF2q9M8YMF",
+    "ses_2a6018cbeffejQXiKReSsOO2k2",
+    "ses_2a5cc48f3ffeyP47mxHiTB2mMg",
+    "ses_2a5c62f56ffeFvvGcogEFEHekk",
+    "ses_2a5c6450cffe5Y57VCnu5pNaSD",
+    "ses_2a5c60af2ffeakYI57jYj72UfL",
+    "ses_2a5c379fdffeDLmnPKqJ2NDAVu",
+    "ses_2a5c38010ffeq08Rhg9WPKTWeF",
+    "ses_2a5c5b894ffeXzZVrqhoOBAvyJ",
+    "ses_2a5c545ceffeYoWj0MhOhHxe6E"
   ],
   "plan_name": "ccc-media-plugin-tdd",
-  "current_wave": 2,
-  "current_task": 8,
+  "current_wave": 4,
+  "current_task": 38,
   "wave_1": {
     "status": "completed",
     "completed_at": "2026-04-04T18:15:00.000Z",
     "commit": "ec749f4"
+  },
+  "wave_2": {
+    "status": "completed",
+    "completed_at": "2026-04-04T22:30:00.000Z",
+    "commit": "1d18891"
+  },
+  "wave_3": {
+    "status": "completed",
+    "completed_at": "2026-04-05T02:30:00.000Z",
+    "commit": "783601e"
   },
   "task_sessions": {}
 }

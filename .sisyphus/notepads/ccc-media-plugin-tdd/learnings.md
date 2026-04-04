@@ -169,3 +169,33 @@
 - `Mock<PluginConfiguration>(MockBehavior.Loose)` for configuration
 - `MockBehavior.Strict` for API client, services (verifies exact calls)
 - Tests verify: start/completed logs, STRM creation, cancellation handling
+
+## Wave 4 Research (Jellyfin APIs)
+
+### User Data Persistence
+- **IUserDataManager** - for per-item user data (watched status, favorites)
+- **Plugin.DataFolderPath** - for custom JSON storage (per-user preferences, watchlists)
+- **Custom DbContext** - for complex relational data (optional)
+- Store user data at: `plugin.DataFolderPath/user-{guid}.json`
+
+### Per-User Library Creation
+- **ILibraryManager.AddVirtualFolder(name, collectionType, LibraryOptions, refreshLibrary)**
+- **LibraryOptions** has: `Enabled`, `PathInfos`, `EnablePhotos`, etc.
+- **IMPORTANT**: Jellyfin core has NO per-library ACL - need custom implementation
+- Approaches for per-user visibility:
+  1. Virtual folder naming: `user_{username}_watchlist`
+  2. Filter libraries via custom API endpoint
+  3. Use parental controls (MaxParentalRating)
+
+### Background Download Patterns
+- **IScheduledTask** - for periodic queue processing
+- **IHostedService** - for persistent background services (already in use by SyncService)
+- **IHttpClientFactory.CreateClient(NamedClient.Default)** - for HTTP requests
+- **IProgress<double>** - for progress reporting to UI
+- Download queue pattern: Store in database or JSON, process with IHostedService
+
+### Key Namespaces
+- `MediaBrowser.Controller.Library` - ILibraryManager, IUserDataManager
+- `MediaBrowser.Model.Configuration` - LibraryOptions
+- `MediaBrowser.Model.Plugins` - BasePluginConfiguration
+- `Microsoft.Extensions.Hosting` - IHostedService
