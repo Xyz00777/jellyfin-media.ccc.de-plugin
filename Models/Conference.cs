@@ -28,5 +28,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Models
 
         [JsonPropertyName("schedule_url")]
         public string? ScheduleUrl { get; set; }
+
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
     }
 }

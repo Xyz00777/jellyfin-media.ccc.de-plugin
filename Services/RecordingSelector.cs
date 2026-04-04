@@ -9,7 +9,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
     /// Selects the best recording from available options based on user preferences.
     /// Priority order: Language > Quality > Format > Resolution > File Size > Bitrate.
     /// </summary>
-    public class RecordingSelector
+    public class RecordingSelector : IRecordingSelector
     {
         /// <summary>
         /// Selects the best recording from a list based on user preferences.
