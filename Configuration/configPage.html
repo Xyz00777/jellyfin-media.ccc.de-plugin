@@ -1,9 +1,159 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Media CCC DE Plugin Configuration</title>
+    <meta charset="utf-8">
+    <title>MediaCCC.de</title>
 </head>
 <body>
-    <h1>Media CCC DE Plugin Configuration</h1>
+    <div id="MediaCccConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-select,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <h1>MediaCCC.de</h1>
+                <p class="description">Configure synchronization of conference talks from media.ccc.de</p>
+
+                <form id="MediaCccConfigForm">
+                    <div class="verticalSection">
+                        <h2>Storage</h2>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="WatchlistPath">Watchlist Path</label>
+                            <input is="emby-input" type="text" id="WatchlistPath" name="WatchlistPath" required />
+                            <div class="fieldDescription">
+                                Directory where watchlist data is stored. Default: /config/plugins/ccc-media/watchlists/
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h2>Quality</h2>
+                        <div class="selectContainer">
+                            <label class="selectLabel" for="PreferredQuality">Preferred Quality</label>
+                            <select is="emby-select" id="PreferredQuality" name="PreferredQuality">
+                                <option value="hd">HD (High Definition)</option>
+                                <option value="sd">SD (Standard Definition)</option>
+                            </select>
+                            <div class="fieldDescription">
+                                Quality preference for downloaded recordings. Falls back to available quality if preferred not found.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h2>Synchronization</h2>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="SyncIntervalHours">Sync Interval (hours)</label>
+                            <input is="emby-input" type="number" id="SyncIntervalHours" name="SyncIntervalHours" pattern="[0-9]*" required min="1" max="168" />
+                            <div class="fieldDescription">
+                                How often to check for new conference content. Default: 6 hours. Range: 1-168 hours.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="verticalSection">
+                        <h2>Language Preferences</h2>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="PreferredAudioLanguages">Preferred Audio Languages</label>
+                            <input is="emby-input" type="text" id="PreferredAudioLanguages" name="PreferredAudioLanguages" placeholder="en, de, fr" />
+                            <div class="fieldDescription">
+                                Comma-separated ISO 639-1 language codes. Talks will use the first available match. Default: Original language.
+                                <br />
+                                <span class="examples">Common: en (English), de (German), fr (French), es (Spanish)</span>
+                            </div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="PreferredSubtitleLanguages">Preferred Subtitle Languages</label>
+                            <input is="emby-input" type="text" id="PreferredSubtitleLanguages" name="PreferredSubtitleLanguages" placeholder="en, de" />
+                            <div class="fieldDescription">
+                                Comma-separated ISO 639-1 language codes. Falls back to first available subtitle language if no match.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <button is="emby-button" type="submit" class="raised button-submit block">
+                            <span>Save</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script>
+            (function () {
+                'use strict';
+
+                var PluginConfig = {
+                    pluginId: 'e225c91a-ef11-41ca-b913-6491f15c2992'
+                };
+
+                function loadConfiguration() {
+                    Dashboard.showLoadingMsg();
+
+                    ApiClient.getPluginConfiguration(PluginConfig.pluginId).then(function (config) {
+                        document.querySelector('#WatchlistPath').value = config.WatchlistPath || '';
+                        document.querySelector('#PreferredQuality').value = config.PreferredQuality || 'hd';
+                        document.querySelector('#SyncIntervalHours').value = config.SyncIntervalHours || 6;
+
+                        var audioLangs = config.PreferredAudioLanguages || [];
+                        document.querySelector('#PreferredAudioLanguages').value = Array.isArray(audioLangs) ? audioLangs.join(', ') : '';
+
+                        var subtitleLangs = config.PreferredSubtitleLanguages || [];
+                        document.querySelector('#PreferredSubtitleLanguages').value = Array.isArray(subtitleLangs) ? subtitleLangs.join(', ') : '';
+
+                        Dashboard.hideLoadingMsg();
+                    }).catch(function (error) {
+                        Dashboard.hideLoadingMsg();
+                        Dashboard.alert({
+                            title: 'Error',
+                            message: 'Failed to load configuration: ' + error.message
+                        });
+                    });
+                }
+
+                function saveConfiguration(e) {
+                    Dashboard.showLoadingMsg();
+
+                    ApiClient.getPluginConfiguration(PluginConfig.pluginId).then(function (config) {
+                        config.WatchlistPath = document.querySelector('#WatchlistPath').value.trim();
+                        config.PreferredQuality = document.querySelector('#PreferredQuality').value;
+                        config.SyncIntervalHours = parseInt(document.querySelector('#SyncIntervalHours').value, 10) || 6;
+
+                        var audioInput = document.querySelector('#PreferredAudioLanguages').value.trim();
+                        config.PreferredAudioLanguages = audioInput
+                            ? audioInput.split(',').map(function (lang) { return lang.trim(); }).filter(function (lang) { return lang.length > 0; })
+                            : [];
+
+                        var subtitleInput = document.querySelector('#PreferredSubtitleLanguages').value.trim();
+                        config.PreferredSubtitleLanguages = subtitleInput
+                            ? subtitleInput.split(',').map(function (lang) { return lang.trim(); }).filter(function (lang) { return lang.length > 0; })
+                            : [];
+
+                        ApiClient.updatePluginConfiguration(PluginConfig.pluginId, config).then(function (result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        }).catch(function (error) {
+                            Dashboard.hideLoadingMsg();
+                            Dashboard.alert({
+                                title: 'Error',
+                                message: 'Failed to save configuration: ' + error.message
+                            });
+                        });
+                    });
+
+                    e.preventDefault();
+                    return false;
+                }
+
+                var page = document.querySelector('#MediaCccConfigPage');
+                if (page) {
+                    page.addEventListener('pageshow', loadConfiguration);
+                }
+
+                var form = document.querySelector('#MediaCccConfigForm');
+                if (form) {
+                    form.addEventListener('submit', saveConfiguration);
+                }
+            })();
+        </script>
+    </div>
 </body>
 </html>

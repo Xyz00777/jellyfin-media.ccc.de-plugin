@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Language Preferences - CCC Media</title>
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --bg-elevated: #222222;
+            --accent-green: #00ff88;
+            --accent-red: #ff3366;
+            --accent-blue: #00ccff;
+            --text-primary: #e0e0e0;
+            --text-secondary: #999999;
+            --text-muted: #666666;
+            --border-subtle: #333333;
+            --border-accent: #444444;
+            --mono-font: 'JetBrains Mono', 'Fira Code', 'Ubuntu Mono', 'Consolas', monospace;
+            --system-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--system-font);
+            line-height: 1.6;
+            padding: 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .page-header {
+            position: relative;
+            margin-bottom: 3rem;
+            padding: 2.5rem 0;
+        }
+
+        .page-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -10%;
+            right: -10%;
+            bottom: -50%;
+            background: 
+                radial-gradient(ellipse at 20% 50%, rgba(0, 255, 136, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(0, 204, 255, 0.05) 0%, transparent 40%);
+            opacity: 0.6;
+            z-index: -1;
+        }
+
+        .page-header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .page-header .subtitle {
+            color: var(--text-muted);
+            font-family: var(--mono-font);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .terminal-alert {
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent-green);
+            padding: 1rem 1.5rem;
+            margin-bottom: 2rem;
+            font-family: var(--mono-font);
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .terminal-alert::before {
+            content: '>';
+            color: var(--accent-green);
+            font-weight: bold;
+        }
+
+        .terminal-alert.loading {
+            border-left-color: #ffcc00;
+        }
+
+        .terminal-alert.loading::before {
+            content: '...';
+            color: #ffcc00;
+            animation: pulse 1.5s infinite;
+        }
+
+        .terminal-alert.error {
+            border-left-color: var(--accent-red);
+        }
+
+        .terminal-alert.error::before {
+            content: '!';
+            color: var(--accent-red);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .language-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .language-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            opacity: 0.5;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .language-section > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .help-text {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+            font-family: var(--mono-font);
+        }
+
+        .sortable-list {
+            list-style: none;
+            min-height: 80px;
+            margin-bottom: 1.5rem;
+        }
+
+        .sortable-list.empty::after {
+            content: 'No languages added yet';
+            display: block;
+            padding: 2rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-family: var(--mono-font);
+            font-size: 0.875rem;
+            border: 2px dashed var(--border-subtle);
+            border-radius: 4px;
+        }
+
+        .language-item {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-accent);
+            padding: 1rem 1.5rem;
+            margin-bottom: 0.75rem;
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 1rem;
+            align-items: center;
+            cursor: grab;
+            transition: all 0.2s ease;
+            border-radius: 4px;
+        }
+
+        .language-item:hover {
+            background: var(--bg-elevated);
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 20px rgba(0, 204, 255, 0.1);
+        }
+
+        .language-item.dragging {
+            opacity: 0.5;
+            cursor: grabbing;
+        }
+
+        .language-item.drag-over {
+            border-color: var(--accent-green);
+            background: rgba(0, 255, 136, 0.05);
+        }
+
+        .drag-handle {
+            color: var(--text-muted);
+            cursor: grab;
+            padding: 0.25rem;
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+
+        .language-name {
+            font-family: var(--mono-font);
+            font-size: 0.9375rem;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .language-code {
+            font-family: var(--mono-font);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-left: 0.5rem;
+        }
+
+        .remove-btn {
+            background: transparent;
+            border: 1px solid var(--border-subtle);
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            font-family: var(--mono-font);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            transition: all 0.2s ease;
+            border-radius: 3px;
+        }
+
+        .remove-btn:hover {
+            border-color: var(--accent-red);
+            color: var(--accent-red);
+            background: rgba(255, 51, 102, 0.1);
+        }
+
+        .add-controls {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .language-select {
+            flex: 1;
+            padding: 0.75rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-subtle);
+            color: var(--text-primary);
+            font-family: var(--mono-font);
+            font-size: 0.875rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .language-select:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .btn {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-accent);
+            color: var(--text-primary);
+            padding: 0.75rem 1.5rem;
+            font-family: var(--mono-font);
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-radius: 4px;
+        }
+
+        .btn:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 20px rgba(0, 204, 255, 0.2);
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        .btn-primary {
+            background: var(--accent-green);
+            color: var(--bg-primary);
+            border-color: var(--accent-green);
+        }
+
+        .btn-primary:hover {
+            background: #00cc77;
+            border-color: #00cc77;
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+        }
+
+        .save-controls {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .btn-save {
+            flex: 1;
+            justify-content: center;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            .page-header h1 {
+                font-size: 2rem;
+            }
+
+            .language-section {
+                padding: 1.5rem;
+            }
+
+            .add-controls {
+                flex-direction: column;
+            }
+
+            .save-controls {
+                flex-direction: column;
+            }
+
+            .language-item {
+                grid-template-columns: auto 1fr;
+            }
+
+            .language-item .remove-btn {
+                grid-column: 1 / -1;
+                width: 100%;
+                margin-top: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <h1>Language Preferences</h1>
+        <div class="subtitle">Audio and subtitle language priority</div>
+    </div>
+
+    <div id="alertBox" class="terminal-alert loading">
+        <span id="alertText">Loading language preferences...</span>
+    </div>
+
+    <form id="langPrefsForm">
+        <div class="language-section">
+            <h2 class="section-title">Preferred Audio Languages</h2>
+            <p class="help-text">Drag to reorder. Top language is tried first when multiple audio tracks available.</p>
+            
+            <ul id="audioLanguages" class="sortable-list" data-type="audio">
+                <!-- Populated by JS -->
+            </ul>
+            
+            <div class="add-controls">
+                <select id="audioLangSelect" class="language-select">
+                    <option value="">Select a language to add...</option>
+                    <option value="eng">English (eng)</option>
+                    <option value="deu">German (deu)</option>
+                    <option value="spa">Spanish (spa)</option>
+                    <option value="fra">French (fra)</option>
+                    <option value="ita">Italian (ita)</option>
+                    <option value="por">Portuguese (por)</option>
+                    <option value="rus">Russian (rus)</option>
+                    <option value="jpn">Japanese (jpn)</option>
+                    <option value="kor">Korean (kor)</option>
+                    <option value="zho">Chinese (zho)</option>
+                    <option value="nld">Dutch (nld)</option>
+                    <option value="pol">Polish (pol)</option>
+                    <option value="swe">Swedish (swe)</option>
+                    <option value="fin">Finnish (fin)</option>
+                    <option value="nor">Norwegian (nor)</option>
+                    <option value="dan">Danish (dan)</option>
+                    <option value="ces">Czech (ces)</option>
+                    <option value="hun">Hungarian (hun)</option>
+                    <option value="ron">Romanian (ron)</option>
+                    <option value="ukr">Ukrainian (ukr)</option>
+                </select>
+                <button type="button" id="addAudioLang" class="btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Add
+                </button>
+            </div>
+        </div>
+
+        <div class="language-section">
+            <h2 class="section-title">Preferred Subtitle Languages</h2>
+            <p class="help-text">Drag to reorder. Leave empty for no subtitle preference (uses original or first available).</p>
+            
+            <ul id="subtitleLanguages" class="sortable-list" data-type="subtitle">
+                <!-- Populated by JS -->
+            </ul>
+            
+            <div class="add-controls">
+                <select id="subtitleLangSelect" class="language-select">
+                    <option value="">Select a language to add...</option>
+                    <option value="eng">English (eng)</option>
+                    <option value="deu">German (deu)</option>
+                    <option value="spa">Spanish (spa)</option>
+                    <option value="fra">French (fra)</option>
+                    <option value="ita">Italian (ita)</option>
+                    <option value="por">Portuguese (por)</option>
+                    <option value="rus">Russian (rus)</option>
+                    <option value="jpn">Japanese (jpn)</option>
+                    <option value="kor">Korean (kor)</option>
+                    <option value="zho">Chinese (zho)</option>
+                    <option value="nld">Dutch (nld)</option>
+                    <option value="pol">Polish (pol)</option>
+                    <option value="swe">Swedish (swe)</option>
+                    <option value="fin">Finnish (fin)</option>
+                    <option value="nor">Norwegian (nor)</option>
+                    <option value="dan">Danish (dan)</option>
+                    <option value="ces">Czech (ces)</option>
+                    <option value="hun">Hungarian (hun)</option>
+                    <option value="ron">Romanian (ron)</option>
+                    <option value="ukr">Ukrainian (ukr)</option>
+                </select>
+                <button type="button" id="addSubtitleLang" class="btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Add
+                </button>
+            </div>
+        </div>
+
+        <div class="save-controls">
+            <button type="submit" id="savePrefs" class="btn btn-primary btn-save">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                Save Preferences
+            </button>
+        </div>
+    </form>
+
+    <script src="__plugin/language-prefs.js"></script>
+</body>
+</html>

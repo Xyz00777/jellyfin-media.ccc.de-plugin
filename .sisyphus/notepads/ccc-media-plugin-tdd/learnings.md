@@ -229,3 +229,120 @@
 - Implementation compiles correctly
 - Other test files (DownloadProcessing, FileService, DownloadQueue, UserLibraryService) have pre-existing errors from unfinished TDD tasks
 - UserDataManager tests will run once other tasks are complete
+
+## Wave 5: API Endpoints Tests (Task 60)
+
+### RED Phase Tests Created
+- File: `Tests/Unit/ApiEndpointsTests.cs`
+- Tests define expected behavior for `MediaCccController` and `SyncController`
+- Controllers do NOT exist yet - tests intentionally FAIL
+
+### MediaCccController Endpoints (6 tests)
+1. `GET /media_ccc/conferences` - Returns list of conferences
+   - Happy path: 200 OK with conferences list
+   - Empty list: 200 OK with empty list
+   - API failure: 500 error
+
+2. `GET /media_ccc/conferences/{id}/events` - Returns events for conference
+   - Happy path: 200 OK with events array
+   - Invalid ID: 400 Bad Request
+   - No events: 200 OK with empty array
+
+3. `GET /media_ccc/events/{guid}` - Returns single event
+   - Happy path: 200 OK with event details
+   - Not found: 404 NotFound
+   - Empty GUID: 400 Bad Request
+
+4. `POST /media_ccc/watchlist/add` - Add event to watchlist
+   - Requires authentication (401 if not authenticated)
+   - Validates event GUID (400 for empty)
+   - Idempotent (no duplicates)
+
+5. `POST /media_ccc/watchlist/remove` - Remove event from watchlist
+   - Requires authentication
+   - Validates event GUID
+   - Idempotent (OK even if event not on list)
+
+6. `GET /media_ccc/watchlist` - Get user's watchlist
+   - Requires authentication
+   - Returns empty list for new user
+
+### SyncController Endpoints (3 tests)
+1. `POST /media_ccc/sync/trigger` - Manually trigger sync
+   - Requires admin (Elevation policy)
+   - Returns 202 Accepted
+   - 403 Forbidden for non-admin
+
+2. `GET /media_ccc/sync/status` - Get sync status/progress
+   - Requires admin
+   - Returns sync history
+
+3. `GET /media_ccc/sync/history` - Get sync history
+   - Optional filter by conference acronym
+   - Requires admin
+
+### Controller Pattern
+- Base route: `[Route("media_ccc")]` for MediaCccController
+- Base route: `[Route("media_ccc/sync")]` for SyncController
+- Admin endpoints use `[Authorize(Policy = "Elevation")]`
+- User endpoints check `HttpContext.User` for `ClaimTypes.NameIdentifier`
+
+### Test Helper Pattern
+```csharp
+private MediaCccController CreateMediaCccControllerWithUser(Guid userId)
+{
+    var controller = CreateBaseController();
+    var claims = new List<Claim> { new Claim(ClaimTypes.NameIdentifier, userId.ToString()) };
+    var identity = new ClaimsIdentity(claims, "Test");
+    controller.ControllerContext.HttpContext.User = new ClaimsPrincipal(identity);
+    return controller;
+}
+```
+
+### Interfaces to Mock
+- `IMediaCccApiClient` - Conference/event data fetch
+- `IUserDataManager` - Watchlist operations
+- `ISyncLogger` - Sync history/status
+- `PluginConfiguration` - Sync settings
+
+### Build Status (RED Phase)
+- 10 expected compilation errors:
+  - CS0234: `Controllers` namespace does not exist
+  - CS0246: `MediaCccController` type not found
+  - CS0246: `SyncController` type not found
+- These errors confirm TDD RED phase - implementation needed in GREEN phase
+
+## Task 49: Configuration Page Scaffold (2026-04-05)
+
+### Jellyfin Configuration Page Pattern
+- Uses `data-role="page"` with class `"page type-interior pluginConfigurationPage"`
+- `data-require` attribute lists required Emby components: `emby-input,emby-button,emby-select,emby-checkbox`
+- Plugin GUID: `e225c91a-ef11-41ca-b913-6491f15c2992`
+
+### UI Structure
+- `verticalSection` divs group related settings with `<h2>` headers
+- `inputContainer` for text/number inputs with `emby-input` custom element
+- `selectContainer` for dropdowns with `emby-select` custom element
+- `fieldDescription` divs provide help text below inputs
+- Submit button: `is="emby-button" type="submit" class="raised button-submit block"`
+
+### JavaScript Pattern (Modern, No jQuery)
+- `ApiClient.getPluginConfiguration(pluginId)` - load config
+- `ApiClient.updatePluginConfiguration(pluginId, config)` - save config
+- Event listener on 'pageshow' event (NOT jQuery's .on('pageshow'))
+- IIFE pattern to avoid polluting global scope
+- Handle arrays by joining with ', ' for display, splitting on save
+
+### Configuration Properties Mapped
+- `WatchlistPath` - text input
+- `PreferredQuality` - select dropdown (hd/sd)
+- `SyncIntervalHours` - number input (1-168)
+- `PreferredAudioLanguages` - comma-separated text → array
+- `PreferredSubtitleLanguages` - comma-separated text → array
+
+### Design System Workflow Applied
+1. Researched existing Jellyfin plugin configs (TMDb, Douban, others)
+2. Identified standard components (emby-input, emby-select, etc.)
+3. Matched existing patterns (verticalSection, inputContainer, fieldDescription)
+4. Used proper event handler pattern (pageshow event listener)
+5. Clean, minimal UI aligned with Jellyfin's design system

@@ -155,7 +155,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         {
             lock (_lock)
             {
-                return Task.FromResult(_queue.Count);
+                return Task.FromResult(_queue.Values.Count(i => i.Status == DownloadStatus.Pending));
             }
         }
 
@@ -190,7 +190,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
             var json = JsonSerializer.Serialize(itemsToSave, new JsonSerializerOptions
             {
-                WriteIndented = true
+                WriteIndented = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
             });
 
             await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
@@ -212,7 +213,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             try
             {
                 var json = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
-                var items = JsonSerializer.Deserialize<List<DownloadQueueItem>>(json);
+                var items = JsonSerializer.Deserialize<List<DownloadQueueItem>>(json, new JsonSerializerOptions
+                {
+                    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+                });
 
                 lock (_lock)
                 {

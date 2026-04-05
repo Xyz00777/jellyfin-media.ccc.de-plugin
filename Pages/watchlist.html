@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Watchlist - CCC Media</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #00a4dc;
+            --success-color: #4caf50;
+            --warning-color: #ff9800;
+            --error-color: #f44336;
+            --bg-color: #101010;
+            --card-bg: #1a1a1a;
+            --text-primary: #fff;
+            --text-secondary: #ccc;
+            --border-color: #333;
+            --hover-bg: #252525;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 28px;
+            font-weight: 600;
+            margin: 0 0 24px 0;
+            letter-spacing: -0.02em;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            transition: all 0.3s ease;
+        }
+
+        .status-bar:hover {
+            background: var(--hover-bg);
+        }
+
+        .queue-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .queue-count {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .queue-count strong {
+            color: var(--primary-color);
+            font-size: 18px;
+        }
+
+        .sync-button {
+            background: var(--primary-color);
+            color: var(--text-primary);
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .sync-button:hover {
+            background: #00b9f2;
+            transform: translateY(-1px);
+        }
+
+        .sync-button:disabled {
+            background: #555;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Table */
+        .watchlist-table-wrapper {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        #watchlistTable {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        #watchlistTable thead {
+            background: #0a0a0a;
+        }
+
+        #watchlistTable th {
+            text-align: left;
+            padding: 16px 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        #watchlistTable tbody tr {
+            transition: background 0.2s ease;
+        }
+
+        #watchlistTable tbody tr:hover {
+            background: var(--hover-bg);
+        }
+
+        #watchlistTable td {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        #watchlistTable tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .event-title {
+            font-weight: 500;
+            color: var(--text-primary);
+            max-width: 400px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .conference-name {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* Status Badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .status-pending {
+            background: rgba(255, 152, 0, 0.15);
+            color: var(--warning-color);
+        }
+
+        .status-downloading {
+            background: rgba(0, 164, 220, 0.15);
+            color: var(--primary-color);
+        }
+
+        .status-complete {
+            background: rgba(76, 175, 80, 0.15);
+            color: var(--success-color);
+        }
+
+        .status-failed {
+            background: rgba(244, 67, 54, 0.15);
+            color: var(--error-color);
+        }
+
+        .status-icon {
+            font-size: 14px;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 150px;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--primary-color);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .progress-text {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* Action Buttons */
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .btn-remove {
+            background: rgba(244, 67, 54, 0.1);
+            color: var(--error-color);
+        }
+
+        .btn-remove:hover {
+            background: rgba(244, 67, 54, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .btn-retry {
+            background: rgba(76, 175, 80, 0.1);
+            color: var(--success-color);
+        }
+
+        .btn-retry:hover {
+            background: rgba(76, 175, 80, 0.2);
+            transform: translateY(-1px);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-state-title {
+            font-size: 20px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .empty-state-text {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* Loading State */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .loading-spinner {
+            border: 3px solid var(--border-color);
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .status-bar {
+                flex-direction: column;
+                gap: 12px;
+                align-items: stretch;
+            }
+
+            #watchlistTable thead {
+                display: none;
+            }
+
+            #watchlistTable tbody tr {
+                display: block;
+                margin-bottom: 16px;
+                padding: 16px;
+                border-radius: 8px;
+                background: var(--card-bg);
+            }
+
+            #watchlistTable td {
+                display: flex;
+                justify-content: space-between;
+                padding: 8px 0;
+                border: none;
+            }
+
+            #watchlistTable td::before {
+                content: attr(data-label);
+                font-weight: 600;
+                color: var(--text-secondary);
+                font-size: 12px;
+                text-transform: uppercase;
+                margin-right: 12px;
+            }
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        .fade-in:nth-child(1) { animation-delay: 0.05s; }
+        .fade-in:nth-child(2) { animation-delay: 0.1s; }
+        .fade-in:nth-child(3) { animation-delay: 0.15s; }
+        .fade-in:nth-child(4) { animation-delay: 0.2s; }
+        .fade-in:nth-child(5) { animation-delay: 0.25s; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>My Watchlist</h1>
+
+        <!-- Download Queue Status -->
+        <div class="status-bar">
+            <div class="queue-info">
+                <span class="queue-count"><strong id="queueCount">0</strong> items in queue</span>
+            </div>
+            <button id="triggerSync" class="sync-button" onclick="triggerSync()">
+                ▶ Start Download
+            </button>
+        </div>
+
+        <!-- Watchlist Table -->
+        <div class="watchlist-table-wrapper">
+            <table id="watchlistTable">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Conference</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="watchlistBody">
+                    <!-- Populated by JavaScript -->
+                </tbody>
+            </table>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="loading" style="display: none;">
+                <div class="loading-spinner"></div>
+                <p>Loading watchlist...</p>
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="empty-state fade-in" style="display: none;">
+                <div class="empty-state-icon">📁</div>
+                <div class="empty-state-title">Your watchlist is empty</div>
+                <div class="empty-state-text">
+                    Browse conferences and add events to your watchlist to download them for offline viewing.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const WatchlistPage = {
+            pluginId: 'e225c91a-ef11-41ca-b913-6491f15c2992',
+            userId: null,
+
+            init: function() {
+                this.userId = this.getUserId();
+                if (!this.userId) {
+                    console.error('User not authenticated');
+                    return;
+                }
+
+                this.loadWatchlist();
+                this.loadQueueStatus();
+            },
+
+            getUserId: function() {
+                // Try to get user ID from Jellyfin's ApiClient
+                if (typeof ApiClient !== 'undefined' && ApiClient.getCurrentUserId) {
+                    return ApiClient.getCurrentUserId();
+                }
+                // Fallback: parse from JWT token or claims
+                return null;
+            },
+
+            loadWatchlist: function() {
+                const loadingState = document.getElementById('loadingState');
+                const emptyState = document.getElementById('emptyState');
+                const tableBody = document.getElementById('watchlistBody');
+
+                loadingState.style.display = 'block';
+                emptyState.style.display = 'none';
+                tableBody.innerHTML = '';
+
+                if (typeof ApiClient === 'undefined') {
+                    console.error('ApiClient not available');
+                    this.showError('Jellyfin API not available. Please access through Jellyfin web interface.');
+                    loadingState.style.display = 'none';
+                    return;
+                }
+
+                // Fetch watchlist from API
+                fetch(`${ApiClient.serverAddress()}/media_ccc/watchlist`, {
+                    headers: {
+                        'Authorization': `MediaBrowser Token="${ApiClient.accessToken()}"`,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to load watchlist');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    loadingState.style.display = 'none';
+
+                    if (!data || data.length === 0) {
+                        emptyState.style.display = 'block';
+                        return;
+                    }
+
+                    // Fetch event details for each item
+                    return Promise.all(data.map(eventGuid => 
+                        fetch(`${ApiClient.serverAddress()}/media_ccc/events/${eventGuid}`, {
+                            headers: {
+                                'Authorization': `MediaBrowser Token="${ApiClient.accessToken()}"`,
+                                'Content-Type': 'application/json'
+                            }
+                        }).then(r => r.ok ? r.json() : null)
+                    ));
+                })
+                .then(events => {
+                    if (!events) return;
+
+                    events = events.filter(e => e !== null);
+
+                    if (events.length === 0) {
+                        emptyState.style.display = 'block';
+                        return;
+                    }
+
+                    events.forEach((event, index) => {
+                        const row = this.createEventRow(event, index);
+                        tableBody.appendChild(row);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading watchlist:', error);
+                    loadingState.style.display = 'none';
+                    this.showError('Failed to load watchlist. Please try again.');
+                });
+            },
+
+            createEventRow: function(event, index) {
+                const tr = document.createElement('tr');
+                tr.className = 'fade-in';
+                tr.dataset.eventGuid = event.guid;
+
+                const status = this.getDownloadStatus(event.guid);
+                const statusBadge = this.createStatusBadge(status);
+
+                tr.innerHTML = `
+                    <td data-label="Title">
+                        <div class="event-title" title="${this.escapeHtml(event.title)}">
+                            ${this.escapeHtml(event.title)}
+                        </div>
+                    </td>
+                    <td data-label="Conference">
+                        <span class="conference-name">${this.escapeHtml(event.conference_acronym || 'Unknown')}</span>
+                    </td>
+                    <td data-label="Status">
+                        ${statusBadge}
+                        ${status.status === 'downloading' ? `
+                            <div class="progress-container">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${status.progress}%"></div>
+                                </div>
+                                <span class="progress-text">${status.progress}% downloaded</span>
+                            </div>
+                        ` : ''}
+                    </td>
+                    <td data-label="Actions">
+                        <div class="actions">
+                            ${status.status === 'failed' ? `
+                                <button class="btn btn-retry" onclick="WatchlistPage.retryDownload('${event.guid}')">
+                                    ↻ Retry
+                                </button>
+                            ` : ''}
+                            <button class="btn btn-remove" onclick="WatchlistPage.removeFromWatchlist('${event.guid}')">
+                                ✕ Remove
+                            </button>
+                        </div>
+                    </td>
+                `;
+
+                return tr;
+            },
+
+            getDownloadStatus: function(eventGuid) {
+                // Placeholder: In real implementation, fetch from download queue
+                // For now, return mock data
+                const statuses = ['pending', 'complete', 'downloading', 'failed'];
+                const status = statuses[Math.floor(Math.random() * statuses.length)];
+
+                return {
+                    status: status,
+                    progress: status === 'downloading' ? Math.floor(Math.random() * 100) : 0
+                };
+            },
+
+            createStatusBadge: function(status) {
+                const statusConfig = {
+                    pending: { icon: '⏳', label: 'Pending', class: 'status-pending' },
+                    downloading: { icon: '⬇️', label: 'Downloading', class: 'status-downloading' },
+                    complete: { icon: '✅', label: 'Ready', class: 'status-complete' },
+                    failed: { icon: '❌', label: 'Failed', class: 'status-failed' }
+                };
+
+                const config = statusConfig[status.status] || statusConfig.pending;
+
+                return `
+                    <span class="status-badge ${config.class}">
+                        <span class="status-icon">${config.icon}</span>
+                        <span>${config.label}</span>
+                    </span>
+                `;
+            },
+
+            removeFromWatchlist: function(eventGuid) {
+                if (!confirm('Remove this item from your watchlist? The downloaded file will be deleted.')) {
+                    return;
+                }
+
+                fetch(`${ApiClient.serverAddress()}/media_ccc/watchlist/${eventGuid}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `MediaBrowser Token="${ApiClient.accessToken()}"`,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        // Remove row from table
+                        const row = document.querySelector(`tr[data-event-guid="${eventGuid}"]`);
+                        if (row) {
+                            row.style.opacity = '0';
+                            row.style.transform = 'translateX(-20px)';
+                            setTimeout(() => {
+                                row.remove();
+                                // Check if table is empty
+                                const tableBody = document.getElementById('watchlistBody');
+                                if (tableBody.children.length === 0) {
+                                    document.getElementById('emptyState').style.display = 'block';
+                                }
+                            }, 300);
+                        }
+
+                        // Update queue count
+                        this.loadQueueStatus();
+                    } else {
+                        alert('Failed to remove item. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error removing from watchlist:', error);
+                    alert('Failed to remove item. Please try again.');
+                });
+            },
+
+            retryDownload: function(eventGuid) {
+                // Placeholder: Trigger retry
+                console.log('Retrying download for:', eventGuid);
+                alert('Retry functionality will be implemented with download service');
+            },
+
+            loadQueueStatus: function() {
+                // Placeholder: In real implementation, fetch from download queue API
+                const queueCount = document.getElementById('queueCount');
+                const tableRows = document.querySelectorAll('#watchlistBody tr');
+                queueCount.textContent = tableRows.length;
+            },
+
+            triggerSync: function() {
+                const button = document.getElementById('triggerSync');
+                button.disabled = true;
+                button.textContent = '⏳ Syncing...';
+
+                // Placeholder: Trigger download service
+                setTimeout(() => {
+                    button.disabled = false;
+                    button.textContent = '▶ Start Download';
+                    this.loadWatchlist();
+                }, 2000);
+            },
+
+            showError: function(message) {
+                const tableBody = document.getElementById('watchlistBody');
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--error-color); padding: 40px;">
+                            ${this.escapeHtml(message)}
+                        </td>
+                    </tr>
+                `;
+            },
+
+            escapeHtml: function(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+        };
+
+        // Initialize on page show
+        document.addEventListener('DOMContentLoaded', function() {
+            WatchlistPage.init();
+        });
+
+        // Also listen for Jellyfin page show event
+        if (typeof document.querySelector !== 'undefined') {
+            const page = document.querySelector('.page');
+            if (page) {
+                page.addEventListener('pageshow', function() {
+                    WatchlistPage.init();
+                });
+            }
+        }
+    </script>
+</body>
+</html>

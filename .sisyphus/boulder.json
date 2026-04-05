@@ -46,15 +46,26 @@
     "ses_2a5c545ceffeYoWj0MhOhHxe6E",
     "ses_2a5bd0110ffe1zE4VNHWcSWyjw",
     "ses_2a5b8cde1ffec9562oxfzfXNu0",
-    "ses_2a5b924b6ffeGsOOhXnKvU8yqm"
+    "ses_2a5b924b6ffeGsOOhXnKvU8yqm",
+    "ses_2a48a1f39fferZ1BWVlxFQaUla",
+    "ses_2a47cef70ffeEEGWvOKtGQ4ve2",
+    "ses_2a479eefdffeZ31f0M6Gn5n4Sd",
+    "ses_2a478d8ebffeFrR9kDbHgRSwm6",
+    "ses_2a47c276bffeOBXrzHDC9Gak1G",
+    "ses_2a479f538ffepXsrL5UgjbVLL2",
+    "ses_2a478bc1dffemP5YdFnNIuZJ76",
+    "ses_2a47c0296ffewUPYKRaQ3sBdu4",
+    "ses_2a47bd778ffeTzy7E85LWqA4KZ",
+    "ses_2a47beb04ffeCu9Pebm68f3FJE",
+    "ses_2a47686daffeLQGobNrnxk7PPN"
   ],
   "plan_name": "ccc-media-plugin-tdd",
-  "current_wave": 4,
-  "current_task": 38,
-  "wave_1": {
+  "current_wave": 5,
+  "current_task": 49,
+  "wave_4": {
     "status": "completed",
-    "completed_at": "2026-04-04T18:15:00.000Z",
-    "commit": "ec749f4"
+    "completed_at": "2026-04-05T02:45:00.000Z",
+    "commit": "6a4d900"
   },
   "wave_2": {
     "status": "completed",

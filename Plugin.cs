@@ -23,7 +23,28 @@ namespace Jellyfin.Plugin.MediaCccDe
                 new PluginPageInfo 
                 { 
                     Name = Name, 
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.config.html" 
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html" 
+                },
+                new PluginPageInfo
+                {
+                    Name = "Browse",
+                    EmbeddedResourcePath = GetType().Namespace + ".Pages.browse.html",
+                    EnableInMainMenu = true,
+                    MenuSection = "server",
+                    MenuIcon = "folder"
+                },
+                new PluginPageInfo
+                {
+                    Name = "CCC Watchlist",
+                    EmbeddedResourcePath = GetType().Namespace + ".Pages.watchlist.html",
+                    EnableInMainMenu = true,
+                    MenuSection = "server",
+                    MenuIcon = "bookmark"
+                },
+                new PluginPageInfo 
+                { 
+                    Name = Name + " Sync Log", 
+                    EmbeddedResourcePath = GetType().Namespace + ".Pages.sync-log.html" 
                 }
             };
         }

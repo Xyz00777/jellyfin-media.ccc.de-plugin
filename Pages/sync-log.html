@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sync History - CCC Media</title>
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #111111;
+            --bg-tertiary: #1a1a1a;
+            --bg-elevated: #222222;
+            --accent-green: #00ff88;
+            --accent-red: #ff3366;
+            --accent-yellow: #ffcc00;
+            --accent-blue: #00ccff;
+            --text-primary: #e0e0e0;
+            --text-secondary: #999999;
+            --text-muted: #666666;
+            --border-subtle: #333333;
+            --border-accent: #444444;
+            --mono-font: 'JetBrains Mono', 'Fira Code', 'Ubuntu Mono', 'Consolas', monospace;
+            --system-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--system-font);
+            line-height: 1.6;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Header with gradient mesh background */
+        .page-header {
+            position: relative;
+            margin-bottom: 3rem;
+            padding: 2.5rem 0;
+        }
+
+        .page-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -10%;
+            right: -10%;
+            bottom: -50%;
+            background: 
+                radial-gradient(ellipse at 20% 50%, rgba(0, 255, 136, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(0, 204, 255, 0.05) 0%, transparent 40%),
+                radial-gradient(ellipse at 60% 80%, rgba(255, 51, 102, 0.04) 0%, transparent 50%);
+            opacity: 0.6;
+            z-index: -1;
+        }
+
+        .page-header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .page-header .subtitle {
+            color: var(--text-muted);
+            font-family: var(--mono-font);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        /* Terminal-style alert box */
+        .terminal-alert {
+            background: var(--bg-secondary);
+            border-left: 3px solid var(--accent-green);
+            padding: 1rem 1.5rem;
+            margin-bottom: 2rem;
+            font-family: var(--mono-font);
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .terminal-alert::before {
+            content: '>';
+            color: var(--accent-green);
+            font-weight: bold;
+        }
+
+        .terminal-alert.loading {
+            border-left-color: var(--accent-yellow);
+        }
+
+        .terminal-alert.loading::before {
+            content: '...';
+            color: var(--accent-yellow);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Controls */
+        .sync-controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-accent);
+            color: var(--text-primary);
+            padding: 0.75rem 1.5rem;
+            font-family: var(--mono-font);
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .btn:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 20px rgba(0, 204, 255, 0.2);
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        .btn-primary {
+            background: var(--accent-green);
+            color: var(--bg-primary);
+            border-color: var(--accent-green);
+        }
+
+        .btn-primary:hover {
+            background: #00cc77;
+            border-color: #00cc77;
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+        }
+
+        .btn-danger {
+            border-color: var(--accent-red);
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 51, 102, 0.1);
+            box-shadow: 0 0 20px rgba(255, 51, 102, 0.2);
+        }
+
+        /* Log viewer container with noise texture */
+        .log-viewer {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .log-viewer::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            opacity: 0.5;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .log-viewer > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Empty state */
+        .log-empty {
+            padding: 4rem 2rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-family: var(--mono-font);
+        }
+
+        .log-empty .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        /* Log entry */
+        .log-entry {
+            border-bottom: 1px solid var(--border-subtle);
+            transition: background 0.2s ease;
+        }
+
+        .log-entry:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-header {
+            display: grid;
+            grid-template-columns: auto 1fr auto auto;
+            gap: 1rem;
+            padding: 1rem 1.5rem;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .log-header:hover {
+            background: rgba(0, 204, 255, 0.03);
+        }
+
+        .log-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: var(--mono-font);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0.25rem 0.75rem;
+            border-radius: 3px;
+            font-weight: 600;
+        }
+
+        .status-completed {
+            background: rgba(0, 255, 136, 0.1);
+            color: var(--accent-green);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .status-failed {
+            background: rgba(255, 51, 102, 0.1);
+            color: var(--accent-red);
+            border: 1px solid rgba(255, 51, 102, 0.3);
+        }
+
+        .status-started {
+            background: rgba(255, 204, 0, 0.1);
+            color: var(--accent-yellow);
+            border: 1px solid rgba(255, 204, 0, 0.3);
+            animation: pulse 2s infinite;
+        }
+
+        .log-conference {
+            font-family: var(--mono-font);
+            font-size: 0.9375rem;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .log-time {
+            font-family: var(--mono-font);
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+        }
+
+        .expand-icon {
+            color: var(--text-muted);
+            font-size: 1.25rem;
+            transition: transform 0.2s ease;
+        }
+
+        .log-entry.expanded .expand-icon {
+            transform: rotate(90deg);
+        }
+
+        /* Log details */
+        .log-details {
+            display: none;
+            background: var(--bg-tertiary);
+            padding: 1rem 1.5rem 1rem 3rem;
+            font-family: var(--mono-font);
+            font-size: 0.8125rem;
+        }
+
+        .log-entry.expanded .log-details {
+            display: block;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .detail-label {
+            font-size: 0.6875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+        }
+
+        .detail-value {
+            color: var(--text-secondary);
+        }
+
+        .detail-value.error {
+            color: var(--accent-red);
+        }
+
+        /* Loading skeleton */
+        .skeleton {
+            background: linear-gradient(90deg, 
+                var(--bg-tertiary) 25%, 
+                var(--bg-elevated) 50%, 
+                var(--bg-tertiary) 75%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s infinite;
+        }
+
+        @keyframes skeleton-loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .skeleton-entry {
+            height: 60px;
+            margin: 1rem 1.5rem;
+            border-radius: 4px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            .page-header h1 {
+                font-size: 2rem;
+            }
+
+            .log-header {
+                grid-template-columns: 1fr;
+                gap: 0.5rem;
+            }
+
+            .sync-controls {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        /* Scrollbar styling */
+        .log-viewer::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .log-viewer::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        .log-viewer::-webkit-scrollbar-thumb {
+            background: var(--border-accent);
+            border-radius: 4px;
+        }
+
+        .log-viewer::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <h1>Sync History</h1>
+        <div class="subtitle">Conference archive synchronization log</div>
+    </div>
+
+    <div id="alertBox" class="terminal-alert loading">
+        <span id="alertText">Initializing sync log viewer...</span>
+    </div>
+
+    <div class="sync-controls">
+        <button id="manualSync" class="btn btn-primary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                <path d="M21 3v6h-6"/>
+            </svg>
+            Trigger Manual Sync
+        </button>
+        <button id="refreshLog" class="btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            Refresh
+        </button>
+        <button id="clearHistory" class="btn btn-danger">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+            </svg>
+            Clear History
+        </button>
+    </div>
+
+    <div id="syncLog" class="log-viewer">
+        <!-- Loading skeletons -->
+        <div class="skeleton skeleton-entry"></div>
+        <div class="skeleton skeleton-entry"></div>
+        <div class="skeleton skeleton-entry"></div>
+    </div>
+
+    <script src="__plugin/sync-log.js"></script>
+</body>
+</html>
