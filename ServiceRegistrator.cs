@@ -18,10 +18,13 @@ public class ServiceRegistrator : IPluginServiceRegistrator
         });
         
         serviceCollection.AddSingleton<IMediaCccApiClient, MediaCccApi>();
-        serviceCollection.AddSingleton<UserDataManager>();
+        serviceCollection.AddSingleton<IUserDataManager, UserDataManager>();
         serviceCollection.AddSingleton<IUserLibraryService, UserLibraryService>();
+        serviceCollection.AddSingleton<IDownloadQueue, DownloadQueue>();
+        serviceCollection.AddSingleton<IFileService, FileService>();
         
         serviceCollection.AddHostedService<LibrarySetupService>();
         serviceCollection.AddHostedService<SyncService>();
+        serviceCollection.AddHostedService<DownloadService>();
     }
 }

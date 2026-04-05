@@ -15,12 +15,6 @@
 
   <ItemGroup>
     <Compile Remove="Tests\**\*.cs" />
-    <Compile Remove="Services\UserLibraryService.cs" />
-    <Compile Remove="Services\IUserLibraryService.cs" />
-    <Compile Remove="Services\DownloadService.cs" />
-    <Compile Remove="Services\FileService.cs" />
-    <Compile Remove="Services\IFileService.cs" />
-    <Compile Remove="ServiceRegistrator.cs" />
   </ItemGroup>
 
   <ItemGroup>
