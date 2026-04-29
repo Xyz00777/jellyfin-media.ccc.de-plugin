@@ -83,3 +83,10 @@ artifacts/
 *.user
 *.userosscache
 *.sln.docstates
+
+## Nix
+.direnv/
+result
+
+## macOS
+.DS_Store
