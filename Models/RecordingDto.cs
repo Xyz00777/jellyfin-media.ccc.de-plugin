@@ -28,7 +28,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Models
         [JsonPropertyName("url")]
         public string Url { get; set; } = string.Empty;
 
-        [JsonPropertyName("mime_type")]
+        [JsonPropertyName("mimetype")]
         public string? MimeType { get; set; }
 
         [JsonPropertyName("length")]

@@ -314,6 +314,53 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
         #endregion
 
+        #region Serialization Bug Tests
+
+        [Fact]
+        public void RecordingDto_deserializes_mimetype_from_API()
+        {
+            // The actual media.ccc.de API sends "mimetype" (no underscore)
+            var json = @"{""mimetype"":""video/mp4"",""language"":""en"",""url"":""https://cdn.media.ccc.de/v.mp4""}";
+            var recording = JsonSerializer.Deserialize<RecordingDto>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+            Assert.NotNull(recording);
+            Assert.Equal("video/mp4", recording.MimeType);
+        }
+
+        [Fact]
+        public void Recording_HighQuality_preserves_null_unknown_state()
+        {
+            // null = "unknown", should NOT be coerced to false
+            var recording = new Recording { HighQuality = null };
+            Assert.Null(recording.HighQuality);
+        }
+
+        [Fact]
+        public void Recording_deserialization_does_not_throw()
+        {
+            // Verify Recording can be deserialized without InvalidOperationException
+            // from duplicate [JsonPropertyName] attributes
+            var json = @"{""id"":1,""high_quality"":true,""url"":""https://example.com/v.mp4""}";
+            var ex = Record.Exception(() => JsonSerializer.Deserialize<Recording>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            }));
+            Assert.Null(ex);
+        }
+
+        [Fact]
+        public void Recording_roundtrip_preserves_HighQuality_null()
+        {
+            var recording = new Recording { Id = 1, HighQuality = null, Url = "https://example.com/v.mp4" };
+            var json = JsonSerializer.Serialize(recording);
+            var deserialized = JsonSerializer.Deserialize<Recording>(json);
+            Assert.Null(deserialized.HighQuality);
+        }
+
+        #endregion
+
         #region RecordingDto Tests
 
         [Fact]

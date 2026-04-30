@@ -103,9 +103,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Act
             var result = selector.SelectBestRecording(recordings, preferences);
 
-            // Assert - Should default to SD when quality is unknown
+            // Assert - Unknown quality (null) is preserved, not coerced to false
             Assert.NotNull(result);
-            Assert.False(result.HighQuality ?? true); // Should be treated as SD (false)
+            Assert.Null(result.HighQuality);
         }
 
         #endregion

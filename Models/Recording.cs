@@ -29,13 +29,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Models
         public string? Format { get; set; }
 
         [JsonPropertyName("high_quality")]
-        private bool? _highQuality = false;
-        [JsonPropertyName("high_quality")]
-        public bool? HighQuality 
-        { 
-            get => _highQuality;
-            set => _highQuality = value ?? false;
-        }
+        public bool? HighQuality { get; set; }
 
         [JsonPropertyName("width")]
         public int? Width { get; set; }

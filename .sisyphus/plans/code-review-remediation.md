@@ -8,7 +8,7 @@
 
 ## Phase 0 — Bootstrap (Blockers for all other work)
 
-- [ ] **P0-1: Fix ServiceRegistrator DI to allow plugin startup**
+- [x] **P0-1: Fix ServiceRegistrator DI to allow plugin startup**
   - C1 (`StrmGenerator` requires unresolvable `string archivePath`)
   - C2 (`StrmTreeGenerator` requires unresolvable `IStrmFileGenerator`)
   - H10 (Singleton `MediaCccApi` with raw `HttpClient` → DNS staleness)
