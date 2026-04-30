@@ -104,12 +104,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events36C3);
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(
-                _apiClientMock.Object,
-                CreateStrmGenerator(),
-                CreateSyncLogger(),
-                config,
-                _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
 
             // Act: Run full sync operation
             await _syncService.StartAsync(CancellationToken.None);
@@ -145,12 +140,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events);
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(
-                _apiClientMock.Object,
-                CreateStrmGenerator(),
-                CreateSyncLogger(),
-                config,
-                _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
 
             // Act
             await _syncService.StartAsync(CancellationToken.None);
@@ -180,12 +170,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events);
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(
-                _apiClientMock.Object,
-                CreateStrmGenerator(),
-                CreateSyncLogger(),
-                config,
-                _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
 
             // Act
             await _syncService.StartAsync(CancellationToken.None);
@@ -222,12 +207,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
 
             var config = CreateTestConfiguration();
             var syncLogger = CreateSyncLogger();
-            _syncService = new SyncService(
-                _apiClientMock.Object,
-                CreateStrmGenerator(),
-                syncLogger,
-                config,
-                _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLogger, () => config, _loggerMock.Object);
 
             // Act
             await _syncService.StartAsync(CancellationToken.None);
@@ -259,12 +239,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events);
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(
-                _apiClientMock.Object,
-                CreateStrmGenerator(),
-                CreateSyncLogger(),
-                config,
-                _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
 
             // Act: First sync
             await _syncService.StartAsync(CancellationToken.None);
@@ -314,12 +289,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events);
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(
-                _apiClientMock.Object,
-                CreateStrmGenerator(),
-                CreateSyncLogger(),
-                config,
-                _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
 
             await _syncService.StartAsync(CancellationToken.None);
             await Task.Delay(1000);
@@ -337,12 +307,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ThrowsAsync(new TaskCanceledException("Request timeout"));
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(
-                _apiClientMock.Object,
-                CreateStrmGenerator(),
-                CreateSyncLogger(),
-                config,
-                _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
 
             await _syncService.StartAsync(CancellationToken.None);
             await Task.Delay(500);
@@ -372,12 +337,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ThrowsAsync(new Exception("Event fetch failed"));
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(
-                _apiClientMock.Object,
-                CreateStrmGenerator(),
-                CreateSyncLogger(),
-                config,
-                _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
 
             await _syncService.StartAsync(CancellationToken.None);
             await Task.Delay(500);
@@ -417,12 +377,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 });
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(
-                _apiClientMock.Object,
-                CreateStrmGenerator(),
-                CreateSyncLogger(),
-                config,
-                _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
 
             // Act: Start sync then cancel
             await _syncService.StartAsync(cts.Token);
@@ -451,12 +406,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events);
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(
-                _apiClientMock.Object,
-                CreateStrmGenerator(),
-                CreateSyncLogger(),
-                config,
-                _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
 
             // Act: Start sync
             await _syncService.StartAsync(CancellationToken.None);
@@ -467,12 +417,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
             var filesAfterPause = Directory.GetFiles(_testArchivePath, "*.strm", SearchOption.AllDirectories).Length;
 
             // Resume: Restart the service
-            _syncService = new SyncService(
-                _apiClientMock.Object,
-                CreateStrmGenerator(),
-                CreateSyncLogger(),
-                config,
-                _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
             await _syncService.StartAsync(CancellationToken.None);
             await Task.Delay(300);
             await _syncService.StopAsync(CancellationToken.None);

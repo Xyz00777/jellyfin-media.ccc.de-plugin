@@ -156,3 +156,71 @@
 - `SemaphoreSlim.WaitAsync(TimeSpan)` has a max value of `int.MaxValue` ms. Any `SyncIntervalHours > 596` would overflow. The cap ensures this can't happen.
 - `_syncTrigger.Wait(TimeSpan.Zero)` is a non-blocking drain — it returns `true` if a signal was consumed, `false` if the semaphore is empty. Safe to call from the async loop since it only runs after `WaitAsync` returns.
 - The `TriggerSyncAsync` signal is persistent — if `Release()` is called before `WaitAsync`, the count increases and the next `WaitAsync` returns immediately with `triggered=true`. This means there's no race condition between triggering and the loop entering the wait state.
+
+## P2-4: Unify Duplicate Logic — StrmGenerator, StrmTreeGenerator, StrmFileGeneratorAdapter
+
+### Changes Made
+1. **NEW: `Services/StrmHelper.cs`** — Shared utility class with three methods:
+   - `ExtractDayNumber(string? date, string? conferenceFirstDay)` — Computes day/season number from event date. Uses conference first day offset when available, falls back to December convention (Dec 27 = Day 1), then to day-of-month for other conferences. Returns `int?` (null for unparseable/empty dates).
+   - `SanitizeFileName(string name)` — Removes invalid filename chars (platform-invalid + explicit `/`, `\`, `:`, `*`, `?`, `"`, `<`, `>`, `|`) and trims dots/spaces. Returns "unknown" for null/empty.
+   - `NormalizeConferenceDirectory(string acronym)` — Sanitizes acronym for use as directory name (preserves original case, unlike old `ToLowerInvariant()`).
+
+2. **Refactored `StrmGenerator.cs`**:
+   - Removed `InvalidFileNameChars` field and private `SanitizeFileName`/`ExtractDayNumber` methods
+   - `BuildStrmFilePath` → uses `StrmHelper.NormalizeConferenceDirectory`, `StrmHelper.SanitizeFileName`, `StrmHelper.ExtractDayNumber`
+   - Added `conferenceFirstDay` parameter to `BuildStrmFilePath` and private `GenerateStrmAsync` overload
+   - `GenerateSeriesStrmTreeAsync` and `CreateStrmFilesForConference` compute `conferenceFirstDay` from min event date and pass it through
+   - `StrmFilesExistForConference` → uses `StrmHelper.NormalizeConferenceDirectory`
+   - Directory naming fix: no longer uses `ToLower()` — preserves API-returned case
+
+3. **Refactored `StrmTreeGenerator.cs`**:
+   - Removed `InvalidFileNameChars` field and private `SanitizeFileName`/`ExtractDayNumber` methods
+   - Uses `StrmHelper.NormalizeConferenceDirectory` (removes `.ToLowerInvariant()`)
+   - Computes `conferenceFirstDay` from events and passes to `StrmHelper.ExtractDayNumber`
+   - Uses `StrmHelper.SanitizeFileName` for slug sanitization
+   - **TOCTOU fix**: Stale file deletion now calls `File.Delete` directly inside try/catch, catching `FileNotFoundException` and `DirectoryNotFoundException` — no race condition between `File.Exists` and `File.Delete`
+
+4. **Refactored `StrmFileGeneratorAdapter.cs`**:
+   - Removed `InvalidFileNameChars` field and private `SanitizeFileName` method
+   - Uses `StrmHelper.SanitizeFileName`
+
+5. **NEW: `Tests/Unit/StrmHelperTests.cs`** — 19 tests:
+   - `ExtractDayNumber_preserves_december_congress_day_number` (Dec 27=1, Dec 28=2, etc.)
+   - `ExtractDayNumber_works_for_july_conference` (day-of-month fallback)
+   - `ExtractDayNumber_works_for_march_conference` (day-of-month fallback)
+   - `ExtractDayNumber_with_conference_start_date_computes_offset`
+   - `ExtractDayNumber_with_conference_start_date_minimum_is_1`
+   - `ExtractDayNumber_with_conference_start_date_overrides_december_convention`
+   - `ExtractDayNumber_returns_null_for_null/empty/invalid_date`
+   - `SanitizeFileName_removes_invalid_chars`
+   - `SanitizeFileName_removes_path_separators`
+   - `SanitizeFileName_returns_unknown_for_null/empty`
+   - `SanitizeFileName_trims_dots_and_spaces`
+   - `SanitizeFileName_preserves_valid_characters`
+   - `SanitizeFileName_preserves_unicode`
+   - `NormalizeConferenceDirectory_preserves_original_case`
+   - `NormalizeConferenceDirectory_sanitizes_acronym`
+   - `NormalizeConferenceDirectory_returns_unknown_for_null`
+
+6. **Updated existing tests**:
+   - `StrmTreeGeneratorTests.GenerateTree_returns_count_of_created_files`: `SeasonsCreated` assertion changed from 3 to 4 (Dec 27 events now correctly get Season 01 instead of null)
+   - `StrmGeneratorTests.GenerateStrm_creates_nested_directory_structure`: `Season 01` → `Season 02` for standalone Dec 28 call (Dec 28 = Day 2 in December convention)
+   - Updated stale comments referencing old `date.Day - 27` formula
+
+### Key Decisions
+- **`ExtractDayNumber` returns `int?`**: Preserves the existing `null` semantics for "no date info" (no season folder). The original task spec said `int` defaulting to 1, but both callers depend on `null` → no season folder vs `1` → Season 01. Returning `int?` is the correct behavior.
+- **Conference first day computed from events**: Rather than adding a `Date` field to `ConferenceDto` (which doesn't have one), we compute `conferenceFirstDay` as the minimum parseable event date in the conference. This works for all conferences, not just December CCC.
+- **`SanitizeFileName` removes chars instead of replacing with `_`**: The old implementations replaced invalid chars with `_`. The new shared version removes them. This is more correct (filenames like `conf/test` → `conftest` instead of `conf_test`) and consistent with the `Path.GetInvalidFileNameChars()` approach. Existing tests only checked `DoesNotContain("/")`, so both behaviors pass.
+- **`NormalizeConferenceDirectory` preserves case**: `StrmGenerator` already used original case; `StrmTreeGenerator` used `ToLowerInvariant()`. Both now use the shared method which preserves case. This fixes H5 (directory name mismatch).
+- **Private `GenerateStrmAsync` overload**: Added a private overload accepting `conferenceFirstDay` to avoid changing the `IStrmGenerator` interface. The public method delegates with `null` (December convention fallback).
+
+### TDD Results
+- 19 new tests (StrmHelperTests) — all pass
+- 2 existing tests updated for corrected day numbering
+- 1 existing test updated for corrected season count (3→4)
+- Total: 502 tests passing (483 original + 19 new)
+
+### Sanitization Behavior Change
+- Old: `conf/test` → `conf_test` (replace with underscore)
+- New: `conf/test` → `conftest` (remove character)
+- This is more correct — underscores are valid filename chars and could collide with legitimate names

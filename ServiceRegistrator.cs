@@ -46,6 +46,12 @@ public class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<IDownloadQueue, DownloadQueue>();
         serviceCollection.AddSingleton<IFileService, FileService>();
         
+        serviceCollection.AddSingleton<Func<PluginConfiguration>>(sp =>
+        {
+            var plugin = applicationHost.Resolve<Plugin>();
+            return () => plugin.Configuration;
+        });
+
         serviceCollection.AddHostedService<LibrarySetupService>();
         serviceCollection.AddHostedService<SyncService>();
         serviceCollection.AddHostedService<DownloadService>();

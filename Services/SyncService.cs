@@ -13,26 +13,30 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 {
     public class SyncService : IHostedService
     {
+        private const int DefaultIntervalHours = 6;
+        private const int MaxBackoffMinutes = 30;
+
         private readonly IMediaCccApiClient _apiClient;
         private readonly IStrmGenerator _strmGenerator;
         private readonly ISyncLogger _syncLogger;
-        private readonly PluginConfiguration _configuration;
+        private readonly Func<PluginConfiguration> _configurationProvider;
         private readonly ILogger<SyncService> _logger;
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private readonly SemaphoreSlim _syncTrigger = new SemaphoreSlim(0, int.MaxValue);
         private Task? _backgroundTask;
+        private int _consecutiveErrors;
 
         public SyncService(
             IMediaCccApiClient apiClient,
             IStrmGenerator strmGenerator,
             ISyncLogger syncLogger,
-            PluginConfiguration configuration,
+            Func<PluginConfiguration> configurationProvider,
             ILogger<SyncService> logger)
         {
             _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
             _strmGenerator = strmGenerator ?? throw new ArgumentNullException(nameof(strmGenerator));
             _syncLogger = syncLogger ?? throw new ArgumentNullException(nameof(syncLogger));
-            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+            _configurationProvider = configurationProvider ?? throw new ArgumentNullException(nameof(configurationProvider));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
@@ -68,6 +72,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 try
                 {
                     await SyncConferencesAsync(cancellationToken).ConfigureAwait(false);
+                    _consecutiveErrors = 0;
                 }
                 catch (OperationCanceledException)
                 {
@@ -75,14 +80,45 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error during conference sync");
-                }
+                    _consecutiveErrors++;
+                    var backoffMinutes = Math.Min(Math.Pow(2, _consecutiveErrors - 1), MaxBackoffMinutes);
+                    _logger.LogError(ex, "Error during conference sync (attempt {Attempt}), retrying in {Minutes:F1} minutes",
+                        _consecutiveErrors, backoffMinutes);
 
-                var intervalHours = _configuration.SyncIntervalHours;
-                if (intervalHours <= 0)
-                {
+                    try
+                    {
+                        var backoffDelay = TimeSpan.FromMinutes(backoffMinutes);
+                        var maxDelay = TimeSpan.FromMilliseconds(int.MaxValue);
+                        if (backoffDelay > maxDelay)
+                        {
+                            backoffDelay = maxDelay;
+                        }
+
+                        var triggered = await _syncTrigger.WaitAsync(
+                            backoffDelay, cancellationToken).ConfigureAwait(false);
+
+                        if (triggered)
+                        {
+                            while (_syncTrigger.Wait(TimeSpan.Zero)) { }
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+
                     continue;
                 }
+
+                var intervalHours = _configurationProvider().SyncIntervalHours;
+                if (intervalHours <= 0)
+                {
+                    _logger.LogWarning("SyncIntervalHours is {Value}, defaulting to {Default} hours",
+                        intervalHours, DefaultIntervalHours);
+                    intervalHours = DefaultIntervalHours;
+                }
+
+                _logger.LogInformation("Next sync in {Interval} hours", intervalHours);
 
                 try
                 {

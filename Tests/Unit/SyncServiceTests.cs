@@ -443,13 +443,144 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Assert.Equal(2, syncCallCount);
         }
 
+        [Fact]
+        public async Task SyncService_uses_current_config_not_snapshot()
+        {
+            var initialConfig = new PluginConfiguration { SyncIntervalHours = 999 };
+            var updatedConfig = new PluginConfiguration { SyncIntervalHours = 6 };
+            var currentConfig = initialConfig;
+
+            var firstSyncTcs = new TaskCompletionSource<bool>();
+            var syncCallCount = 0;
+
+            _apiClientMock
+                .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<ConferenceDto>())
+                .Callback(() =>
+                {
+                    var count = Interlocked.Increment(ref syncCallCount);
+                    if (count == 1) firstSyncTcs.TrySetResult(true);
+                });
+
+            var service = new SyncService(
+                _apiClientMock.Object,
+                _strmGeneratorMock.Object,
+                _syncLoggerMock.Object,
+                () => currentConfig,
+                _loggerMock.Object);
+
+            await service.StartAsync(CancellationToken.None);
+
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await firstSyncTcs.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("First sync did not complete within timeout");
+            }
+
+            Assert.Equal(1, syncCallCount);
+            currentConfig = updatedConfig;
+
+            await service.TriggerSyncAsync(CancellationToken.None);
+            await Task.Delay(1000);
+
+            await service.StopAsync(CancellationToken.None);
+
+            Assert.True(syncCallCount >= 2,
+                $"Expected at least 2 syncs after config change, got {syncCallCount}");
+
+            _loggerMock.Verify(
+                x => x.Log(
+                    LogLevel.Information,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("6")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.AtLeastOnce(),
+                "Expected log to reflect updated SyncIntervalHours=6");
+        }
+
+        [Fact]
+        public async Task SyncService_interval_zero_or_negative_does_not_busy_loop()
+        {
+            _configuration.SyncIntervalHours = 0;
+
+            var syncCallCount = 0;
+            var maxAllowedCalls = 5;
+
+            _apiClientMock
+                .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<ConferenceDto>())
+                .Callback(() => Interlocked.Increment(ref syncCallCount));
+
+            var service = CreateService();
+
+            await service.StartAsync(CancellationToken.None);
+            await Task.Delay(2000);
+            await service.StopAsync(CancellationToken.None);
+
+            Assert.True(syncCallCount <= maxAllowedCalls,
+                $"Expected at most {maxAllowedCalls} sync calls with zero interval, " +
+                $"got {syncCallCount}. Busy loop detected.");
+
+            _loggerMock.Verify(
+                x => x.Log(
+                    LogLevel.Warning,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("SyncIntervalHours") ||
+                                                    v.ToString()!.Contains("interval")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.AtLeastOnce(),
+                "Expected warning about invalid SyncIntervalHours");
+        }
+
+        [Fact]
+        public async Task SyncService_uses_exponential_backoff_on_transient_errors()
+        {
+            _configuration.SyncIntervalHours = 6;
+
+            var syncCallCount = 0;
+            var maxAllowedCallsInWindow = 5;
+
+            _apiClientMock
+                .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                .ThrowsAsync(new HttpRequestException("Transient error"))
+                .Callback(() => Interlocked.Increment(ref syncCallCount));
+
+            var service = CreateService();
+
+            await service.StartAsync(CancellationToken.None);
+            await Task.Delay(3000);
+            await service.StopAsync(CancellationToken.None);
+
+            Assert.True(syncCallCount <= maxAllowedCallsInWindow,
+                $"Expected at most {maxAllowedCallsInWindow} retries in 3s with backoff, " +
+                $"got {syncCallCount}. No backoff detected.");
+
+            _loggerMock.Verify(
+                x => x.Log(
+                    LogLevel.Error,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("retry") ||
+                                                    v.ToString()!.Contains("backoff") ||
+                                                    v.ToString()!.Contains("attempt")),
+                    It.IsAny<Exception>(),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.AtLeastOnce(),
+                "Expected error log to include retry/backoff info");
+        }
+
         private SyncService CreateService()
         {
             return new SyncService(
                 _apiClientMock.Object,
                 _strmGeneratorMock.Object,
                 _syncLoggerMock.Object,
-                _configuration,
+                () => _configuration, // Provider returns current config instance
                 _loggerMock.Object);
         }
     }

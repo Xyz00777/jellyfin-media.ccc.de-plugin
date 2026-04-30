@@ -102,7 +102,7 @@
 
 ## Phase 4 — STRM Generation Consistency
 
-- [ ] **P4-1: Unify StrmGenerator & StrmTreeGenerator**
+- [x] **P4-1: Unify StrmGenerator & StrmTreeGenerator**
   - H4 (Hardcoded `date.Day - 27` in `ExtractDayNumber` → only works for December CCC)
   - H5 (Directory name mismatch: lowercase vs original-case acronym)
   - Extract duplicate `SanitizeFileName` and `ExtractDayNumber` into shared utility
