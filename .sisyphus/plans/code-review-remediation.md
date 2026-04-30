@@ -21,7 +21,7 @@
 
 ## Phase 1 — Data Model Integrity (fix models before services that depend on them)
 
-- [ ] **P1-1: Fix Recording.cs + RecordingDto.cs serialization bugs**
+- [x] **P1-1: Fix Recording.cs + RecordingDto.cs serialization bugs**
   - C5 (Duplicate `[JsonPropertyName("high_quality")]` on private field + property)
   - C5 (`mime_type` vs `mimetype` mismatch between `RecordingDto` and `Recording`)
   - `HighQuality` setter coercing null → false (losing "unknown" state)

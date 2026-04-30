@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -66,9 +67,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             {
                 var userData = GetOrCreateUserData(userId);
 
-                if (!userData.Watchlist.Contains(eventGuid))
+                if (userData.Watchlist.Add(eventGuid))
                 {
-                    userData.Watchlist.Add(eventGuid);
                     userData.UpdatedAt = DateTime.UtcNow;
                 }
             }
@@ -99,9 +99,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             {
                 var userData = GetOrCreateUserData(userId);
 
-                if (!userData.SearchProgress.Contains(eventGuid))
+                if (userData.SearchProgress.Add(eventGuid))
                 {
-                    userData.SearchProgress.Add(eventGuid);
                     userData.UpdatedAt = DateTime.UtcNow;
                 }
             }
@@ -121,7 +120,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             lock (_lock)
             {
                 var userData = GetOrCreateUserData(userId);
-                return new List<string>(userData.Watchlist);
+                return userData.Watchlist.ToList();
             }
         }
 
@@ -130,7 +129,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             lock (_lock)
             {
                 var userData = GetOrCreateUserData(userId);
-                userData.PreferredAudioLanguages = new List<string>(languages);
+                userData.PreferredAudioLanguages = new HashSet<string>(languages);
                 userData.UpdatedAt = DateTime.UtcNow;
             }
         }
@@ -140,7 +139,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             lock (_lock)
             {
                 var userData = GetOrCreateUserData(userId);
-                return new List<string>(userData.PreferredAudioLanguages);
+                return userData.PreferredAudioLanguages.ToList();
             }
         }
 
@@ -149,7 +148,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             lock (_lock)
             {
                 var userData = GetOrCreateUserData(userId);
-                userData.PreferredSubtitleLanguages = new List<string>(languages);
+                userData.PreferredSubtitleLanguages = new HashSet<string>(languages);
                 userData.UpdatedAt = DateTime.UtcNow;
             }
         }
@@ -159,7 +158,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             lock (_lock)
             {
                 var userData = GetOrCreateUserData(userId);
-                return new List<string>(userData.PreferredSubtitleLanguages);
+                return userData.PreferredSubtitleLanguages.ToList();
             }
         }
 

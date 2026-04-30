@@ -37,10 +37,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var userData = new UserData
             {
                 UserId = userId,
-                Watchlist = new List<string> { "event-1", "event-2" },
-                SearchProgress = new List<string> { "event-1" },
-                PreferredAudioLanguages = new List<string> { "en", "de" },
-                PreferredSubtitleLanguages = new List<string> { "en", "de" },
+                Watchlist = new HashSet<string> { "event-1", "event-2" },
+                SearchProgress = new HashSet<string> { "event-1" },
+                PreferredAudioLanguages = new HashSet<string> { "en", "de" },
+                PreferredSubtitleLanguages = new HashSet<string> { "en", "de" },
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -99,10 +99,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var originalUserData = new UserData
             {
                 UserId = userId,
-                Watchlist = new List<string> { "event-1" },
-                SearchProgress = new List<string>(),
-                PreferredAudioLanguages = new List<string> { "en" },
-                PreferredSubtitleLanguages = new List<string>(),
+                Watchlist = new HashSet<string> { "event-1" },
+                SearchProgress = new HashSet<string>(),
+                PreferredAudioLanguages = new HashSet<string> { "en" },
+                PreferredSubtitleLanguages = new HashSet<string>(),
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -115,9 +115,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             Assert.NotNull(retrievedUserData);
             Assert.Single(retrievedUserData.Watchlist);
-            Assert.Equal("event-1", retrievedUserData.Watchlist[0]);
+            Assert.Contains("event-1", retrievedUserData.Watchlist);
             Assert.Single(retrievedUserData.PreferredAudioLanguages);
-            Assert.Equal("en", retrievedUserData.PreferredAudioLanguages[0]);
+            Assert.Contains("en", retrievedUserData.PreferredAudioLanguages);
         }
 
         #endregion
@@ -133,10 +133,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var userData = new UserData
             {
                 UserId = userId,
-                Watchlist = new List<string> { "event-1", "event-2" },
-                SearchProgress = new List<string> { "event-1" },
-                PreferredAudioLanguages = new List<string> { "en", "de" },
-                PreferredSubtitleLanguages = new List<string> { "en" },
+                Watchlist = new HashSet<string> { "event-1", "event-2" },
+                SearchProgress = new HashSet<string> { "event-1" },
+                PreferredAudioLanguages = new HashSet<string> { "en", "de" },
+                PreferredSubtitleLanguages = new HashSet<string> { "en" },
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -167,10 +167,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var initialData = new UserData
             {
                 UserId = userId,
-                Watchlist = new List<string> { "event-1" },
-                SearchProgress = new List<string>(),
-                PreferredAudioLanguages = new List<string>(),
-                PreferredSubtitleLanguages = new List<string>(),
+                Watchlist = new HashSet<string> { "event-1" },
+                SearchProgress = new HashSet<string>(),
+                PreferredAudioLanguages = new HashSet<string>(),
+                PreferredSubtitleLanguages = new HashSet<string>(),
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -181,10 +181,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var updatedData = new UserData
             {
                 UserId = userId,
-                Watchlist = new List<string> { "event-2", "event-3" },
-                SearchProgress = new List<string>(),
-                PreferredAudioLanguages = new List<string>(),
-                PreferredSubtitleLanguages = new List<string>(),
+                Watchlist = new HashSet<string> { "event-2", "event-3" },
+                SearchProgress = new HashSet<string>(),
+                PreferredAudioLanguages = new HashSet<string>(),
+                PreferredSubtitleLanguages = new HashSet<string>(),
                 CreatedAt = initialData.CreatedAt,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -215,7 +215,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             var watchlist = userDataManager.GetWatchlist(userId);
             Assert.Single(watchlist);
-            Assert.Equal(eventGuid, watchlist[0]);
+            Assert.Contains(eventGuid, watchlist);
         }
 
         [Fact]
@@ -253,7 +253,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             var watchlist = userDataManager.GetWatchlist(userId);
             Assert.Single(watchlist);
-            Assert.Equal(eventGuid2, watchlist[0]);
+            Assert.Contains(eventGuid2, watchlist);
         }
 
         [Fact]
@@ -303,9 +303,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public void GetWatchlist_returns_ordered_list()
+        public void GetWatchlist_returns_all_items()
         {
-            // Arrange
             var userDataManager = CreateUserDataManager();
             var userId = Guid.NewGuid();
 
@@ -313,14 +312,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             userDataManager.AddToWatchlist(userId, "event-1");
             userDataManager.AddToWatchlist(userId, "event-2");
 
-            // Act
             var watchlist = userDataManager.GetWatchlist(userId);
 
-            // Assert - Should preserve insertion order
             Assert.Equal(3, watchlist.Count);
-            Assert.Equal("event-3", watchlist[0]);
-            Assert.Equal("event-1", watchlist[1]);
-            Assert.Equal("event-2", watchlist[2]);
+            Assert.Contains("event-3", watchlist);
+            Assert.Contains("event-1", watchlist);
+            Assert.Contains("event-2", watchlist);
         }
 
         #endregion
@@ -341,7 +338,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             var userData = userDataManager.GetUserData(userId);
             Assert.Single(userData.SearchProgress);
-            Assert.Equal(eventGuid, userData.SearchProgress[0]);
+            Assert.Equal(eventGuid, userData.SearchProgress.First());
         }
 
         [Fact]
@@ -550,10 +547,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var userData = new UserData
             {
                 UserId = userId,
-                Watchlist = new List<string> { "event-1", "event-2" },
-                SearchProgress = new List<string> { "event-1" },
-                PreferredAudioLanguages = new List<string> { "en", "de" },
-                PreferredSubtitleLanguages = new List<string> { "en" },
+                Watchlist = new HashSet<string> { "event-1", "event-2" },
+                SearchProgress = new HashSet<string> { "event-1" },
+                PreferredAudioLanguages = new HashSet<string> { "en", "de" },
+                PreferredSubtitleLanguages = new HashSet<string> { "en" },
                 CreatedAt = DateTime.UtcNow.AddDays(-1),
                 UpdatedAt = DateTime.UtcNow
             };
@@ -680,6 +677,85 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert
             Assert.True(secondUpdate >= firstUpdate);
+        }
+
+        #endregion
+
+        #region HashSet Semantics Tests
+
+        [Fact]
+        public void Watchlist_deduplicates_entries()
+        {
+            // Directly adding same event twice to UserData.Watchlist
+            // List<string> allows duplicates; HashSet<string> silently ignores
+            var userData = new UserData();
+            userData.Watchlist.Add("event-1");
+            userData.Watchlist.Add("event-1"); // duplicate — List allows, HashSet ignores
+
+            Assert.Single(userData.Watchlist); // Fails with List (count=2), passes with HashSet
+        }
+
+        [Fact]
+        public void SearchProgress_deduplicates_entries()
+        {
+            var userData = new UserData();
+            userData.SearchProgress.Add("event-1");
+            userData.SearchProgress.Add("event-1");
+
+            Assert.Single(userData.SearchProgress);
+        }
+
+        [Fact]
+        public void PreferredAudioLanguages_deduplicates_entries()
+        {
+            var userData = new UserData();
+            userData.PreferredAudioLanguages.Add("en");
+            userData.PreferredAudioLanguages.Add("en");
+
+            Assert.Single(userData.PreferredAudioLanguages);
+        }
+
+        [Fact]
+        public void PreferredSubtitleLanguages_deduplicates_entries()
+        {
+            var userData = new UserData();
+            userData.PreferredSubtitleLanguages.Add("de");
+            userData.PreferredSubtitleLanguages.Add("de");
+
+            Assert.Single(userData.PreferredSubtitleLanguages);
+        }
+
+        [Fact]
+        public void HashSet_provides_O1_lookup_for_watchlist_contains()
+        {
+            // Verify the data structure is HashSet (O(1) Contains)
+            var userData = new UserData();
+            Assert.IsType<HashSet<string>>(userData.Watchlist);
+
+            userData.Watchlist.Add("event-a");
+            Assert.Contains("event-a", userData.Watchlist);
+            Assert.DoesNotContain("event-nonexistent", userData.Watchlist);
+        }
+
+        [Fact]
+        public void HashSet_provides_O1_lookup_for_search_progress_contains()
+        {
+            var userData = new UserData();
+            Assert.IsType<HashSet<string>>(userData.SearchProgress);
+        }
+
+        [Fact]
+        public void HashSet_provides_O1_lookup_for_preferred_audio_languages_contains()
+        {
+            var userData = new UserData();
+            Assert.IsType<HashSet<string>>(userData.PreferredAudioLanguages);
+        }
+
+        [Fact]
+        public void HashSet_provides_O1_lookup_for_preferred_subtitle_languages_contains()
+        {
+            var userData = new UserData();
+            Assert.IsType<HashSet<string>>(userData.PreferredSubtitleLanguages);
         }
 
         #endregion
