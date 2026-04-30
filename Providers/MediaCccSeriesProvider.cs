@@ -18,6 +18,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
         private readonly IMediaCccApiClient _apiClient;
         private readonly IHttpClientFactory _httpClientFactory;
         private IReadOnlyList<ConferenceDto>? _cachedConferences;
+        private DateTime _cacheExpiry = DateTime.MinValue;
+        private readonly SemaphoreSlim _cacheLock = new(1, 1);
+        internal static TimeSpan CacheDuration = TimeSpan.FromMinutes(30);
 
         public string Name => "MediaCccDe Series";
 
@@ -37,7 +40,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
 
             try
             {
-                var conferences = await GetConferencesAsync(cancellationToken).ConfigureAwait(false);
+                var conferences = await GetConferencesWithCacheAsync(cancellationToken).ConfigureAwait(false);
 
                 var matchingConference = conferences.FirstOrDefault(c =>
                     string.Equals(c.Acronym, info.Name, StringComparison.OrdinalIgnoreCase) ||
@@ -51,7 +54,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
                 var series = new Series
                 {
                     Name = matchingConference.Title,
-                    OriginalTitle = matchingConference.Slug,
+                    OriginalTitle = matchingConference.Acronym,
                     Overview = matchingConference.Description,
                     ProviderIds = new Dictionary<string, string>
                     {
@@ -59,12 +62,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
                     }
                 };
 
-                if (!string.IsNullOrEmpty(matchingConference.Description))
-                {
-                    series.Overview = matchingConference.Description;
-                }
-
-                series.Genres = new[] { "Talk" };
+                series.Genres = new[] { "Conference" };
 
                 result.HasMetadata = true;
                 result.Item = series;
@@ -77,26 +75,70 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
             }
         }
 
-        public Task<IEnumerable<RemoteSearchResult>> GetSearchResults(SeriesInfo searchInfo, CancellationToken cancellationToken)
+        public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(SeriesInfo searchInfo, CancellationToken cancellationToken)
         {
-            return Task.FromResult(Enumerable.Empty<RemoteSearchResult>());
-        }
+            var conferences = await GetConferencesWithCacheAsync(cancellationToken).ConfigureAwait(false);
 
-        public async Task<HttpResponseMessage> GetImageResponse(string url, CancellationToken cancellationToken)
-        {
-            var httpClient = _httpClientFactory.CreateClient();
-            return await httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
-        }
+            var results = new List<RemoteSearchResult>();
 
-        private async Task<IReadOnlyList<ConferenceDto>> GetConferencesAsync(CancellationToken cancellationToken)
-        {
-            if (_cachedConferences != null)
+            if (searchInfo.ProviderIds.TryGetValue("MediaCccDe", out var id))
             {
-                return _cachedConferences;
+                var match = conferences.FirstOrDefault(c =>
+                    string.Equals(c.Acronym, id, StringComparison.OrdinalIgnoreCase));
+
+                if (match != null)
+                {
+                    results.Add(new RemoteSearchResult
+                    {
+                        Name = match.Title ?? match.Acronym,
+                        ProviderIds = new Dictionary<string, string> { ["MediaCccDe"] = match.Acronym }
+                    });
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(searchInfo.Name))
+            {
+                var matches = conferences.Where(c =>
+                    c.Acronym?.Contains(searchInfo.Name, StringComparison.OrdinalIgnoreCase) == true ||
+                    c.Title?.Contains(searchInfo.Name, StringComparison.OrdinalIgnoreCase) == true);
+
+                foreach (var match in matches.Take(10))
+                {
+                    results.Add(new RemoteSearchResult
+                    {
+                        Name = match.Title ?? match.Acronym,
+                        ProviderIds = new Dictionary<string, string> { ["MediaCccDe"] = match.Acronym }
+                    });
+                }
             }
 
-            _cachedConferences = await _apiClient.GetConferencesAsync(cancellationToken).ConfigureAwait(false);
-            return _cachedConferences;
+            return results;
+        }
+
+        public Task<HttpResponseMessage> GetImageResponse(string url, CancellationToken cancellationToken)
+        {
+            var httpClient = _httpClientFactory.CreateClient();
+            return httpClient.GetAsync(url, cancellationToken);
+        }
+
+        private async Task<IReadOnlyList<ConferenceDto>> GetConferencesWithCacheAsync(CancellationToken cancellationToken)
+        {
+            await _cacheLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (_cachedConferences != null && DateTime.UtcNow < _cacheExpiry)
+                {
+                    return _cachedConferences;
+                }
+
+                var conferences = await _apiClient.GetConferencesAsync(cancellationToken).ConfigureAwait(false);
+                _cachedConferences = conferences;
+                _cacheExpiry = DateTime.UtcNow + CacheDuration;
+                return _cachedConferences;
+            }
+            finally
+            {
+                _cacheLock.Release();
+            }
         }
     }
 }

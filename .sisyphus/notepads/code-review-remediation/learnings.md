@@ -126,3 +126,33 @@
 - 11 new tests written (all failed RED initially due to constructor type mismatch)
 - Existing tests updated: changed `_recordingSelector` from `RecordingSelector` concrete to `Mock<IRecordingSelector>`
 - Total: 475 tests passing (464 existing + 11 new)
+
+## C9: TriggerSync in SyncService was a no-op
+
+### Bug Fixed
+1. **TriggerSyncAsync did not exist**: SyncService had no `TriggerSyncAsync` method. The SyncController's `TriggerSync()` endpoint just logged and returned `AcceptedResult` without invoking any sync.
+2. **Background loop used Task.Delay with no wake mechanism**: `ExecuteAsync` used `await Task.Delay(TimeSpan.FromHours(intervalHours))` — no way to interrupt the delay and trigger an immediate sync.
+3. **SemaphoreSlim.WaitAsync TimeSpan overflow**: `SemaphoreSlim.WaitAsync(TimeSpan)` throws `ArgumentOutOfRangeException` if the TimeSpan exceeds `int.MaxValue` milliseconds (~24.85 days / ~596 hours). The old `Task.Delay` didn't have this limitation.
+
+### Changes Made
+1. **Added `SemaphoreSlim _syncTrigger`**: Initialized with `(0, int.MaxValue)` — allows unlimited pending trigger signals.
+2. **Added `TriggerSyncAsync(CancellationToken)` method**: Calls `_syncTrigger.Release()` to signal the waiting loop.
+3. **Replaced `Task.Delay` with `_syncTrigger.WaitAsync(delay, cancellationToken)`**: The loop now waits on the semaphore with a timeout. If the timeout elapses (normal interval), `WaitAsync` returns `false` and the loop continues. If `TriggerSyncAsync` releases the semaphore, `WaitAsync` returns `true` immediately and the loop runs a sync cycle.
+4. **Drain logic after trigger**: `while (_syncTrigger.Wait(TimeSpan.Zero)) { }` drains any accumulated signals after a trigger, preventing stale signals from causing extra sync cycles.
+5. **Cap delay at `int.MaxValue` milliseconds**: Before calling `WaitAsync`, the delay is clamped to `TimeSpan.FromMilliseconds(int.MaxValue)` to prevent `ArgumentOutOfRangeException`.
+
+### Key Decisions
+- **SemaphoreSlim over CancellationTokenSource approach**: Cancellation-based approaches (cancel a CTS to wake the loop) work but are one-shot — you need to create a new CTS for each cycle. SemaphoreSlim naturally supports multiple signals and integrates cleanly with the timeout pattern.
+- **`int.MaxValue` max count**: Using `int.MaxValue` as the max semaphore count avoids `SemaphoreFullException` from multiple rapid `TriggerSyncAsync` calls. Signals beyond the first are drained after wake.
+- **ISyncService interface NOT added**: SyncService remains a concrete class implementing `IHostedService`. The `TriggerSyncAsync` method is on the concrete class. Adding an interface was not required by the task constraints.
+- **SyncController NOT modified**: The task specified not to change SyncController.cs. The `TriggerSyncAsync` method is available on `SyncService` for future wiring.
+
+### TDD Results
+- 2 new tests written (both failed RED initially — `TriggerSyncAsync` didn't exist, got CS1061 compilation error)
+- After adding `TriggerSyncAsync` and the semaphore mechanism, both tests passed (GREEN)
+- Total: 477 tests passing (475 existing + 2 new)
+
+### Potential Gotchas
+- `SemaphoreSlim.WaitAsync(TimeSpan)` has a max value of `int.MaxValue` ms. Any `SyncIntervalHours > 596` would overflow. The cap ensures this can't happen.
+- `_syncTrigger.Wait(TimeSpan.Zero)` is a non-blocking drain — it returns `true` if a signal was consumed, `false` if the semaphore is empty. Safe to call from the async loop since it only runs after `WaitAsync` returns.
+- The `TriggerSyncAsync` signal is persistent — if `Release()` is called before `WaitAsync`, the count increases and the next `WaitAsync` returns immediately with `triggered=true`. This means there's no race condition between triggering and the loop entering the wait state.

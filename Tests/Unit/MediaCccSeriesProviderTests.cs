@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -139,12 +140,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public async Task GetMetadata_maps_conference_slug_to_OriginalTitle()
+        public async Task GetMetadata_maps_conference_acronym_to_OriginalTitle()
         {
             var conference = CreateTestConference(
                 acronym: "37c3",
                 title: "37C3: UnLocked",
-                slug: "37c3"
+                slug: "congress/2023/37c3"  // Different from acronym
             );
             
             var mockApi = CreateMockApiClient();
@@ -208,7 +209,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public async Task GetMetadata_sets_Genre_to_Talk()
+        public async Task GetMetadata_sets_Genre_to_Conference()
         {
             var conference = CreateTestConference();
             
@@ -223,7 +224,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             Assert.True(result.HasMetadata);
             Assert.NotNull(result.Item.Genres);
-            Assert.Contains("Talk", result.Item.Genres);
+            Assert.Contains("Conference", result.Item.Genres);
         }
 
         [Fact]
@@ -396,7 +397,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var conference = CreateTestConference(
                 acronym: "37c3",
                 title: "37C3: UnLocked",
-                slug: "37c3",
+                slug: "congress/2023/37c3",
                 description: "Congress description",
                 url: "https://events.ccc.de/congress/2023/",
                 updatedAt: new DateTime(2024, 1, 2)
@@ -442,6 +443,170 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => 
                 provider.GetMetadata(seriesId, cts.Token));
+        }
+
+        #endregion
+
+        #region Cache Expiry Tests
+
+        [Fact]
+        public async Task GetMetadata_fetches_fresh_data_after_cache_expiry()
+        {
+            var oldConference = CreateTestConference(acronym: "37c3", title: "37C3: Old Title");
+            var newConference = CreateTestConference(acronym: "37c3", title: "37C3: Updated Title");
+
+            var mockApi = CreateMockApiClient();
+            var callCount = 0;
+            mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(() =>
+                   {
+                       callCount++;
+                       return callCount == 1
+                           ? new List<ConferenceDto> { oldConference }
+                           : new List<ConferenceDto> { newConference };
+                   });
+
+            var originalCacheDuration = MediaCccSeriesProvider.CacheDuration;
+            MediaCccSeriesProvider.CacheDuration = TimeSpan.FromMilliseconds(50);
+            try
+            {
+            var provider = CreateProvider(apiClient: mockApi.Object);
+
+            var seriesId = new SeriesInfo { Name = "37c3" };
+
+            var result1 = await provider.GetMetadata(seriesId, CancellationToken.None);
+            Assert.Equal("37C3: Old Title", result1.Item.Name);
+
+            await Task.Delay(80);
+
+            var result2 = await provider.GetMetadata(seriesId, CancellationToken.None);
+            Assert.Equal("37C3: Updated Title", result2.Item.Name);
+
+            mockApi.Verify(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()), Times.AtLeast(2));
+            }
+            finally
+            {
+                MediaCccSeriesProvider.CacheDuration = originalCacheDuration;
+            }
+        }
+
+        [Fact]
+        public async Task GetMetadata_returns_cached_data_before_expiry()
+        {
+            var conference = CreateTestConference();
+
+            var mockApi = CreateMockApiClient();
+            mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(new List<ConferenceDto> { conference });
+
+            var provider = CreateProvider(apiClient: mockApi.Object);
+            MediaCccSeriesProvider.CacheDuration = TimeSpan.FromMinutes(30);
+
+            var seriesId = new SeriesInfo { Name = "37c3" };
+
+            await provider.GetMetadata(seriesId, CancellationToken.None);
+            await provider.GetMetadata(seriesId, CancellationToken.None);
+
+            mockApi.Verify(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        #endregion
+
+        #region Thread Safety Tests
+
+        [Fact]
+        public async Task GetMetadata_concurrent_access_does_not_corrupt_cache()
+        {
+            var conference = CreateTestConference(acronym: "37c3", title: "37C3: UnLocked");
+
+            var mockApi = CreateMockApiClient();
+            var apiCallCount = 0;
+            mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                   .Returns(async (CancellationToken ct) =>
+                   {
+                       Interlocked.Increment(ref apiCallCount);
+                       await Task.Delay(50, ct);
+                       return (IReadOnlyList<ConferenceDto>)new List<ConferenceDto> { conference };
+                   });
+
+            var provider = CreateProvider(apiClient: mockApi.Object);
+
+            var seriesId = new SeriesInfo { Name = "37c3" };
+            var tasks = new List<Task<MetadataResult<Series>>>();
+
+            for (var i = 0; i < 10; i++)
+            {
+                tasks.Add(provider.GetMetadata(seriesId, CancellationToken.None));
+            }
+
+            var results = await Task.WhenAll(tasks);
+
+            foreach (var result in results)
+            {
+                Assert.True(result.HasMetadata);
+                Assert.Equal("37C3: UnLocked", result.Item.Name);
+            }
+
+            Assert.True(apiCallCount <= 2, $"API was called {apiCallCount} times; expected at most 2 due to concurrent cache misses");
+        }
+
+        #endregion
+
+        #region GetSearchResults Tests
+
+        [Fact]
+        public async Task GetSearchResults_returns_results_for_known_conference()
+        {
+            var conference = CreateTestConference(acronym: "37c3", title: "37C3: UnLocked");
+
+            var mockApi = CreateMockApiClient();
+            mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(new List<ConferenceDto> { conference });
+
+            var provider = CreateProvider(apiClient: mockApi.Object);
+            var searchInfo = new SeriesInfo();
+            searchInfo.ProviderIds["MediaCccDe"] = "37c3";
+
+            var results = await provider.GetSearchResults(searchInfo, CancellationToken.None);
+
+            Assert.NotEmpty(results);
+            var result = results.First();
+            Assert.Equal("37C3: UnLocked", result.Name);
+            Assert.Equal("37c3", result.ProviderIds["MediaCccDe"]);
+        }
+
+        [Fact]
+        public async Task GetSearchResults_searches_by_name()
+        {
+            var conference = CreateTestConference(acronym: "37c3", title: "37C3: UnLocked");
+
+            var mockApi = CreateMockApiClient();
+            mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(new List<ConferenceDto> { conference });
+
+            var provider = CreateProvider(apiClient: mockApi.Object);
+            var searchInfo = new SeriesInfo { Name = "37c3" };
+
+            var results = await provider.GetSearchResults(searchInfo, CancellationToken.None);
+
+            Assert.NotEmpty(results);
+        }
+
+        [Fact]
+        public async Task GetSearchResults_returns_empty_for_no_match()
+        {
+            var conference = CreateTestConference(acronym: "37c3", title: "37C3: UnLocked");
+
+            var mockApi = CreateMockApiClient();
+            mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                   .ReturnsAsync(new List<ConferenceDto> { conference });
+
+            var provider = CreateProvider(apiClient: mockApi.Object);
+            var searchInfo = new SeriesInfo { Name = "nonexistent" };
+
+            var results = await provider.GetSearchResults(searchInfo, CancellationToken.None);
+
+            Assert.Empty(results);
         }
 
         #endregion

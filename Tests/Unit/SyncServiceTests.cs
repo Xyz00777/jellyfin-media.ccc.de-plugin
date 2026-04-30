@@ -336,6 +336,113 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             await service.StopAsync(CancellationToken.None);
         }
 
+        [Fact]
+        public async Task TriggerSyncAsync_actually_initiates_sync()
+        {
+            _configuration.SyncIntervalHours = 999;
+
+            var firstSyncTcs = new TaskCompletionSource<bool>();
+            var secondSyncTcs = new TaskCompletionSource<bool>();
+            var syncCallCount = 0;
+
+            _apiClientMock
+                .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<ConferenceDto>())
+                .Callback(() =>
+                {
+                    var count = Interlocked.Increment(ref syncCallCount);
+                    if (count == 1) firstSyncTcs.TrySetResult(true);
+                    if (count == 2) secondSyncTcs.TrySetResult(true);
+                });
+
+            var service = CreateService();
+
+            await service.StartAsync(CancellationToken.None);
+
+            using var cts1 = new CancellationTokenSource(3000);
+            try
+            {
+                await firstSyncTcs.Task.WaitAsync(cts1.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("First sync did not complete within timeout");
+            }
+
+            var countBeforeTrigger = syncCallCount;
+            Assert.Equal(1, countBeforeTrigger);
+
+            await service.TriggerSyncAsync(CancellationToken.None);
+
+            using var cts2 = new CancellationTokenSource(3000);
+            try
+            {
+                await secondSyncTcs.Task.WaitAsync(cts2.Token);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
+            await service.StopAsync(CancellationToken.None);
+
+            Assert.True(syncCallCount > countBeforeTrigger,
+                $"TriggerSyncAsync should cause an additional sync cycle. " +
+                $"Calls before trigger: {countBeforeTrigger}, total calls: {syncCallCount}");
+        }
+
+        [Fact]
+        public async Task TriggerSyncAsync_wakes_sync_loop_from_idle()
+        {
+            _configuration.SyncIntervalHours = 999;
+
+            var firstSyncTcs = new TaskCompletionSource<bool>();
+            var secondSyncTcs = new TaskCompletionSource<bool>();
+            var syncCallCount = 0;
+
+            _apiClientMock
+                .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<ConferenceDto>())
+                .Callback(() =>
+                {
+                    var count = Interlocked.Increment(ref syncCallCount);
+                    if (count == 1) firstSyncTcs.TrySetResult(true);
+                    if (count == 2) secondSyncTcs.TrySetResult(true);
+                });
+
+            var service = CreateService();
+
+            await service.StartAsync(CancellationToken.None);
+
+            using var cts1 = new CancellationTokenSource(3000);
+            try
+            {
+                await firstSyncTcs.Task.WaitAsync(cts1.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("First sync did not complete within timeout");
+            }
+
+            Assert.Equal(1, syncCallCount);
+
+            await service.TriggerSyncAsync(CancellationToken.None);
+
+            using var cts2 = new CancellationTokenSource(3000);
+            try
+            {
+                await secondSyncTcs.Task.WaitAsync(cts2.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("TriggerSyncAsync did not wake the sync loop within timeout. " +
+                    "The loop should have been interrupted from its idle delay.");
+            }
+
+            await service.StopAsync(CancellationToken.None);
+
+            Assert.Equal(2, syncCallCount);
+        }
+
         private SyncService CreateService()
         {
             return new SyncService(

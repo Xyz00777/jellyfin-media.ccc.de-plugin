@@ -19,6 +19,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private readonly PluginConfiguration _configuration;
         private readonly ILogger<SyncService> _logger;
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+        private readonly SemaphoreSlim _syncTrigger = new SemaphoreSlim(0, int.MaxValue);
         private Task? _backgroundTask;
 
         public SyncService(
@@ -54,6 +55,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             }
         }
 
+        public Task TriggerSyncAsync(CancellationToken cancellationToken)
+        {
+            _syncTrigger.Release();
+            return Task.CompletedTask;
+        }
+
         private async Task ExecuteAsync(CancellationToken cancellationToken)
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -79,7 +86,20 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
                 try
                 {
-                    await Task.Delay(TimeSpan.FromHours(intervalHours), cancellationToken).ConfigureAwait(false);
+                    var delay = TimeSpan.FromHours(intervalHours);
+                    var maxDelay = TimeSpan.FromMilliseconds(int.MaxValue);
+                    if (delay > maxDelay)
+                    {
+                        delay = maxDelay;
+                    }
+
+                    var triggered = await _syncTrigger.WaitAsync(
+                        delay, cancellationToken).ConfigureAwait(false);
+
+                    if (triggered)
+                    {
+                        while (_syncTrigger.Wait(TimeSpan.Zero)) { }
+                    }
                 }
                 catch (OperationCanceledException)
                 {

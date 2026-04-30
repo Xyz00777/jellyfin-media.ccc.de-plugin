@@ -74,7 +74,7 @@
 
 ## Phase 3 — Core Feature Fixes (things that are simply broken)
 
-- [ ] **P3-1: Fix MediaCccEpisodeProvider GUID lookup**
+- [x] **P3-1: Fix MediaCccEpisodeProvider GUID lookup**
   - C3 (`info.Name` used instead of `info.ProviderIds["MediaCccDe"]`)
   - C4 (Non-deterministic `GetHashCode()` in `DeriveIndexNumber`)
   - C5 (Hardcoded Dec-27 convention in `DeriveParentIndexNumber`)
