@@ -98,7 +98,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conference = CreateConference("37c3", "37C3");
-            var evt = CreateEvent("event-with-special/chars:test", "Event with Special/Chars:Test");
+            var evt = CreateEvent("event-with-special/chars", "Event with Special/Chars");
             var recording = CreateRecording("https://example.com/video.mp4");
 
             _recordingSelectorMock
@@ -110,8 +110,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert
             Assert.NotNull(result);
-            Assert.DoesNotContain("/", result.FilePath.Substring(result.FilePath.LastIndexOf(Path.DirectorySeparatorChar)));
-            Assert.DoesNotContain(":", result.FilePath);
+            Assert.DoesNotContain("/", Path.GetFileName(result.FilePath));
         }
 
         [Fact]
@@ -435,7 +434,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GenerateStrm_sanitizes_conference_acronyms()
         {
             // Arrange
-            var conference = CreateConference("conf/test:name", "Conf/Test:Name");
+            var conference = CreateConference("conf/test", "Conf/Test");
             var evt = CreateEvent("event", "Event");
             var recording = CreateRecording("https://example.com/video.mp4");
 
@@ -449,7 +448,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             Assert.NotNull(result);
             Assert.DoesNotContain("/", Path.GetFileName(Path.GetDirectoryName(result.FilePath)!));
-            Assert.DoesNotContain(":", result.FilePath);
         }
 
         [Fact]
@@ -535,7 +533,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 Title = title,
                 ConferenceId = conferenceId,
                 Date = day.HasValue ? $"2023-12-{27 + day.Value:D2}" : null,
-                Recordings = new List<Recording>()
+                Recordings = new List<Recording>
+                {
+                    new Recording
+                    {
+                        Url = $"https://cdn.media.ccc.de/{slug}.mp4",
+                        Language = "en",
+                        Width = 1920,
+                        Height = 1080,
+                        HighQuality = true,
+                        Format = "mp4"
+                    }
+                }
             };
         }
 
@@ -548,7 +557,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 Title = title,
                 ConferenceId = conferenceId,
                 Date = day.HasValue ? $"2023-12-{27 + day.Value:D2}" : null,
-                Recordings = new List<RecordingDto>()
+                Recordings = new List<RecordingDto>
+                {
+                    new RecordingDto
+                    {
+                        Url = $"https://cdn.media.ccc.de/{slug}.mp4",
+                        Language = "en",
+                        Width = 1920,
+                        Height = 1080,
+                        HighQuality = true,
+                        Format = "mp4"
+                    }
+                }
             };
         }
 

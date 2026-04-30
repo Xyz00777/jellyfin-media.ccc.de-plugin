@@ -42,7 +42,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
                 return new MetadataResult<Episode>
                 {
                     HasMetadata = false,
-                    Item = null
+                    Item = null!
                 };
             }
 

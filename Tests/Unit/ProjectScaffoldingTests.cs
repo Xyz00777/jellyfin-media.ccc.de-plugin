@@ -47,20 +47,31 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests
             var csprojContent = File.ReadAllText(CsprojPath);
             var xdoc = XDocument.Parse(csprojContent);
             var project = xdoc.Element("Project");
-            var itemGroup = project?.Element("ItemGroup");
+            var itemGroups = project?.Elements("ItemGroup");
             
-            var jellyfinPackages = itemGroup?.Elements("PackageReference")
-                .Where(pr => pr.Attribute("Include")?.Value.StartsWith("Jellyfin.") == true);
-            
+            var jellyfinPackages = itemGroups?
+                .Elements("PackageReference")
+                .Where(pr => pr.Attribute("Include")?.Value.StartsWith("Jellyfin.") == true)
+                .ToList();
+
             // Assert
             Assert.NotNull(jellyfinPackages);
             Assert.NotEmpty(jellyfinPackages);
             
             foreach (var package in jellyfinPackages)
             {
-                var excludeAssets = package.Element("ExcludeAssets");
-                Assert.NotNull(excludeAssets);
-                Assert.Equal("runtime", excludeAssets?.Value, ignoreCase: true);
+                // Check for ExcludeAssets as either a child element or attribute
+                var excludeAssetsElement = package.Element("ExcludeAssets");
+                var excludeAssetsAttribute = package.Attribute("ExcludeAssets");
+                
+                var hasExcludeRuntime = (excludeAssetsElement != null && 
+                    excludeAssetsElement.Value.IndexOf("runtime", StringComparison.OrdinalIgnoreCase) >= 0) ||
+                    (excludeAssetsAttribute != null && 
+                    excludeAssetsAttribute.Value.IndexOf("runtime", StringComparison.OrdinalIgnoreCase) >= 0);
+                
+                Assert.True(hasExcludeRuntime, 
+                    $"Jellyfin package '{package.Attribute("Include")?.Value}' should exclude runtime assets. " +
+                    "Add <ExcludeAssets>runtime</ExcludeAssets> as a child element.");
             }
         }
 

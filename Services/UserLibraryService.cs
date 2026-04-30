@@ -1,14 +1,14 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using MediaBrowser.Common.Configuration;
-using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Configuration;
+using MediaBrowser.Model.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.MediaCccDe.Services
@@ -62,10 +62,14 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
                 var libraryOptions = new LibraryOptions
                 {
-                    Enabled = true,
+                    EnablePhotos = false,
+                    EnableRealtimeMonitor = false,
                     PathInfos = new[]
                     {
-                        new PathInfo { Path = libraryPath }
+                        new MediaPathInfo
+                        {
+                            Path = libraryPath
+                        }
                     }
                 };
 
@@ -74,7 +78,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 var newLibrary = FindUserLibrary(userId, sanitizedUsername);
                 if (newLibrary != null)
                 {
-                    RestrictUserToLibrary(user, newLibrary.LibraryId);
                     return newLibrary;
                 }
             }
@@ -97,7 +100,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 return Task.FromResult(false);
             }
 
-            var sanitizedUsername = SanitizeUsername(user.Name);
+            var sanitizedUsername = SanitizeUsername(user.Username);
             var libraryName = $"{sanitizedUsername}'s Watchlist";
             var virtualFolders = _libraryManager.GetVirtualFolders();
 
@@ -116,7 +119,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 return;
             }
 
-            var sanitizedUsername = SanitizeUsername(user.Name);
+            var sanitizedUsername = SanitizeUsername(user.Username);
             var libraryName = $"{sanitizedUsername}'s Watchlist";
             var virtualFolders = _libraryManager.GetVirtualFolders();
 
@@ -141,7 +144,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
             var sanitized = new string(username
                 .Where(c => !InvalidFileNameChars.Contains(c) && c != '/' && c != '\\')
-                .Select(c => c == '/' ? '_' : c)
                 .ToArray());
 
             sanitized = new string(sanitized.Where(c =>
@@ -190,13 +192,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 Path = libraryPath,
                 UserId = userId
             };
-        }
-
-        private void RestrictUserToLibrary(User user, Guid libraryId)
-        {
-            user.Policy.EnableAllFolders = false;
-            user.Policy.EnabledFolders = new[] { libraryId.ToString() };
-            _userManager.UpdateUserAsync(user, CancellationToken.None).GetAwaiter().GetResult();
         }
     }
 }

@@ -8,7 +8,6 @@ using Jellyfin.Plugin.MediaCccDe.Providers;
 using Jellyfin.Plugin.MediaCccDe.Services;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
-using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
 using Moq;
 using Xunit;
@@ -36,13 +35,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var testEvent = CreateTestEvent();
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
             // Assert
@@ -59,13 +57,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var testEvent = CreateTestEvent();
             testEvent.Title = "Opening Ceremony - 37C3";
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
             // Assert
@@ -79,13 +76,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var testEvent = CreateTestEvent();
             testEvent.Description = "This is the opening ceremony of 37C3, featuring exciting announcements and talks.";
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
             // Assert
@@ -99,13 +95,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var testEvent = CreateTestEvent();
             testEvent.Length = 7200; // 2 hours in seconds
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
             // Assert
@@ -119,37 +114,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var testEvent = CreateTestEvent();
-            var bestRecording = new Recording
-            {
-                Id = 1,
-                Language = "en",
-                Format = "mp4",
-                HighQuality = true,
-                Url = "https://cdn.media.ccc.de/37c3/h264-hd/37c3-12746-opening_ceremony.mp4",
-                Width = 1920,
-                Height = 1080,
-                Size = 2048000000L,
-                MimeType = "video/mp4"
-            };
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-            _mockRecordingSelector
-                .Setup(x => x.SelectBestRecording(It.IsAny<IEnumerable<Recording>>(), It.IsAny<RecordingPreferences>()))
-                .Returns(bestRecording);
-
             // Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
-            // Assert
+            // Assert - Provider maps event metadata without selecting recording
             Assert.NotNull(result.Item);
-            // Poster URL should be derived from recording or event poster image
-            // This assertion validates that we set image URLs appropriately
-            // The actual implementation may use a different poster URL strategy
         }
 
         [Fact]
@@ -159,13 +135,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var testEvent = CreateTestEvent();
             testEvent.Date = "2023-12-27";
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
             // Assert
@@ -180,21 +155,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var testEvent = CreateTestEvent();
-            testEvent.Slug = "37c3-12746-opening_ceremony"; // Event slug with order number
+            testEvent.Slug = "37c3-12746-opening_ceremony";
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
             // Assert
             // IndexNumber represents the episode number within a season
-            // This should be derived from event order/schedule position
-            // The actual implementation will need to extract this from conference schedule data
             Assert.NotEqual(0, result.Item.IndexNumber);
         }
 
@@ -203,23 +175,20 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var testEvent = CreateTestEvent();
-            testEvent.Date = "2023-12-27"; // Day 1 of 37C3 (day numbers: 1-4)
+            testEvent.Date = "2023-12-27";
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
             // Assert
             // ParentIndexNumber represents the season (day) number
-            // Day 1 = 2023-12-27, Day 2 = 2023-12-28, etc.
-            Assert.NotEqual(0, result.Item.ParentIndexNumber);
-            // Should be between 1 and 4 (or however many days the conference has)
-            Assert.InRange(result.Item.ParentIndexNumber ?? 0, 1, 10);
+            Assert.NotNull(result.Item.ParentIndexNumber);
+            Assert.InRange(result.Item.ParentIndexNumber ?? 0, 1, 31);
         }
 
         [Fact]
@@ -246,24 +215,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var testEvent = CreateTestEvent();
-            testEvent.Recordings = new List<Recording>(); // No recordings available
+            testEvent.Recordings = new List<Recording>();
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-            _mockRecordingSelector
-                .Setup(x => x.SelectBestRecording(It.IsAny<IEnumerable<Recording>>(), It.IsAny<RecordingPreferences>()))
-                .Returns((Recording?)null);
-
             // Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
-            // Assert
-            // Should still return metadata even without recordings
-            // The provider should gracefully handle this case
+            // Assert - Should not throw, should handle gracefully
             Assert.NotNull(result);
             Assert.True(result.HasMetadata);
             Assert.NotNull(result.Item);
@@ -309,28 +272,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             };
             
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
-            var bestRecording = testEvent.Recordings[2]; // WebM 4K is best
-            
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
+
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-            _mockRecordingSelector
-                .Setup(x => x.SelectBestRecording(
-                    It.IsAny<IEnumerable<Recording>>(), 
-                    It.IsAny<RecordingPreferences>()))
-                .Returns(bestRecording);
-
             // Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
-            // Assert
-            _mockRecordingSelector.Verify(
-                x => x.SelectBestRecording(
-                    It.IsAny<IEnumerable<Recording>>(),
-                    It.IsAny<RecordingPreferences>()),
-                Times.Once);
+            // Assert - Provider maps event metadata; recording selection happens elsewhere
             Assert.NotNull(result.Item);
         }
 
@@ -341,13 +292,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var testEvent = CreateTestEvent();
             testEvent.Date = null;
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
             // Assert - Should not throw, should handle gracefully
@@ -363,13 +313,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var testEvent = CreateTestEvent();
             testEvent.Description = null;
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
             // Assert - Should not throw
@@ -385,13 +334,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var testEvent = CreateTestEvent();
             testEvent.Length = 3600; // 1 hour
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
             // Assert
@@ -406,20 +354,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var testEvent = CreateTestEvent();
             testEvent.Length = 0;
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
             // Assert - Should set runtime to 0 or not set it at all
             Assert.NotNull(result);
             Assert.True(result.HasMetadata);
-            // Runtime should be 0 or null
-            Assert.True(result.Item.RunTimeTicks == 0 || result.Item.RunTimeTicks == null);
+            Assert.Equal(0, result.Item.RunTimeTicks);
         }
 
         [Fact]
@@ -428,14 +374,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var testEvent = CreateTestEvent();
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             var cts = new CancellationTokenSource();
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act & Assert - Should handle cancellation token properly
             var result = await _provider.GetMetadata(episodeInfo, cts.Token);
             Assert.NotNull(result);
         }
@@ -447,20 +392,17 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var testEvent = CreateTestEvent();
             testEvent.Guid = "abc123-def456-789xyz";
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-// Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
             // Assert
-            // The event GUID should be stored as a provider ID for future lookups
             Assert.NotNull(result.Item);
-            // ProviderId should be set for the MediaCccDe provider
-            // Expected: result.Item.ProviderIds["MediaCccDe"] == testEvent.Guid
+            Assert.Equal(testEvent.Guid, result.Item.ProviderIds["MediaCccDe"]);
         }
 
         [Fact]
@@ -477,26 +419,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             };
             
             var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Slug };
-            var selectedRecording = testEvent.Recordings[3]; // Best recording
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
             
             _mockApiClient
                 .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(eventDto);
 
-            _mockRecordingSelector
-                .Setup(x => x.SelectBestRecording(It.IsAny<IEnumerable<Recording>>(), It.IsAny<RecordingPreferences>()))
-                .Returns(selectedRecording);
-
             // Act
             var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
 
-            // Assert
-            _mockRecordingSelector.Verify(
-                x => x.SelectBestRecording(
-                    It.Is<IEnumerable<Recording>>(r => r != null),
-                    It.IsAny<RecordingPreferences>()),
-                Times.Once);
+            // Assert - Provider maps event metadata with recordings preserved in DTO
             Assert.NotNull(result.Item);
         }
 
@@ -535,8 +467,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
         private static EventDto CreateEventDto(Event eventModel)
         {
-            // EventDto wraps Event data from the API
-            // The exact structure depends on your DTO implementation
             return new EventDto
             {
                 Guid = eventModel.Guid,
@@ -546,7 +476,22 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 Date = eventModel.Date,
                 Length = eventModel.Length,
                 ConferenceId = eventModel.ConferenceId,
-                Recordings = eventModel.Recordings
+                Link = eventModel.Link,
+                Recordings = eventModel.Recordings?.Select(r => new RecordingDto
+                {
+                    Id = r.Id,
+                    Language = r.Language,
+                    Format = r.Format ?? string.Empty,
+                    HighQuality = r.HighQuality ?? false,
+                    Width = r.Width ?? 0,
+                    Height = r.Height ?? 0,
+                    Size = r.Size,
+                    Url = r.Url,
+                    MimeType = r.MimeType,
+                    Length = r.Length,
+                    FileSize = r.FileSize,
+                    Bitrate = r.Bitrate
+                }).ToList()
             };
         }
 

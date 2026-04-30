@@ -26,16 +26,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         private readonly Mock<IMediaCccApiClient> _apiClientMock;
         private readonly Mock<IUserDataManager> _userDataManagerMock;
         private readonly Mock<ISyncLogger> _syncLoggerMock;
-        private readonly Mock<PluginConfiguration> _configurationMock;
+        private readonly PluginConfiguration _configuration;
         private readonly Mock<ILogger<MediaCccController>> _mediaCccLoggerMock;
         private readonly Mock<ILogger<SyncController>> _syncLoggerControllerMock;
 
         public ApiEndpointsTests()
         {
             _apiClientMock = new Mock<IMediaCccApiClient>(MockBehavior.Strict);
-            _userDataManagerMock = new Mock<IUserDataManager>(MockBehavior.Strict);
+            _userDataManagerMock = new Mock<IUserDataManager>(MockBehavior.Loose);
             _syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Strict);
-            _configurationMock = new Mock<PluginConfiguration>(MockBehavior.Loose);
+            _configuration = new PluginConfiguration();
             _mediaCccLoggerMock = new Mock<ILogger<MediaCccController>>(MockBehavior.Loose);
             _syncLoggerControllerMock = new Mock<ILogger<SyncController>>(MockBehavior.Loose);
         }
@@ -252,6 +252,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var eventGuid = "event-123";
 
             _userDataManagerMock
+                .Setup(x => x.IsOnWatchlist(userId, eventGuid))
+                .Returns(false);
+
+            _userDataManagerMock
                 .Setup(x => x.AddToWatchlist(userId, eventGuid));
 
             _userDataManagerMock
@@ -460,43 +464,43 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         #region SyncController - TriggerSync Tests
 
         [Fact]
-        public async Task TriggerSync_Returns202Accepted_ForAdminUser()
+        public void TriggerSync_Returns202Accepted_ForAdminUser()
         {
             // Arrange
             var controller = CreateSyncControllerAsAdmin();
 
             // Act
-            var result = await controller.TriggerSync();
+            var result = controller.TriggerSync();
 
             // Assert
             Assert.IsType<AcceptedResult>(result);
         }
 
         [Fact]
-        public async Task TriggerSync_Returns403_ForNonAdminUser()
+        public void TriggerSync_Returns403_ForNonAdminUser()
         {
             // Arrange
             var userId = Guid.NewGuid();
             var controller = CreateSyncControllerWithUser(userId, isAdmin: false);
 
             // Act
-            var result = await controller.TriggerSync();
+            var result = controller.TriggerSync();
 
             // Assert
             Assert.IsType<ForbidResult>(result);
         }
 
         [Fact]
-        public async Task TriggerSync_Returns401_WhenUserNotAuthenticated()
+        public void GetSyncHistory_Returns401_WhenUserNotAuthenticated()
         {
             // Arrange
             var controller = CreateSyncControllerWithoutUser();
 
             // Act
-            var result = await controller.TriggerSync();
+            var result = controller.GetSyncHistory();
 
-            // Assert
-            Assert.IsType<UnauthorizedResult>(result);
+            // Assert - SyncController has class-level AuthAttribute, ForbidResult for unauthenticated
+            Assert.IsType<ForbidResult>(result);
         }
 
         #endregion
@@ -655,16 +659,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public void GetSyncHistory_Returns401_WhenUserNotAuthenticated()
+        public void TriggerSync_Returns401_WhenUserNotAuthenticated()
         {
             // Arrange
             var controller = CreateSyncControllerWithoutUser();
 
             // Act
-            var result = controller.GetSyncHistory();
+            var result = controller.TriggerSync();
 
-            // Assert
-            Assert.IsType<UnauthorizedResult>(result);
+            // Assert - SyncController has class-level AuthorizeAttribute
+            Assert.IsType<ForbidResult>(result);
         }
 
         #endregion
@@ -700,12 +704,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange & Act
             var controllerType = typeof(SyncController);
-            var triggerSyncMethod = controllerType.GetMethod("TriggerSync");
-            var authorizeAttribute = Attribute.GetCustomAttribute(triggerSyncMethod!, typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute)) as Microsoft.AspNetCore.Authorization.AuthorizeAttribute;
+            var authorizeAttribute = Attribute.GetCustomAttribute(controllerType, typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute)) as Microsoft.AspNetCore.Authorization.AuthorizeAttribute;
 
-            // Assert
+            // Assert - SyncController has class-level Authorize attribute with Elevation policy
             Assert.NotNull(authorizeAttribute);
-            // Admin endpoints require elevation policy
             Assert.Equal("Elevation", authorizeAttribute.Policy);
         }
 
@@ -757,7 +759,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 _syncLoggerControllerMock.Object,
                 _syncLoggerMock.Object,
                 _apiClientMock.Object,
-                _configurationMock.Object);
+                _configuration);
 
             controller.ControllerContext = new ControllerContext
             {

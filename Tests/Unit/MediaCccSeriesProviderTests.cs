@@ -440,7 +440,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var provider = CreateProvider(apiClient: mockApi.Object);
             var seriesId = new SeriesInfo { Name = "37c3" };
 
-            await Assert.ThrowsAsync<OperationCanceledException>(() => 
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => 
                 provider.GetMetadata(seriesId, cts.Token));
         }
 

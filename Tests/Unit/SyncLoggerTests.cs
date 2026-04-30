@@ -120,7 +120,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var syncLogger = CreateSyncLogger(maxHistoryEntries: 5);
             var now = DateTime.UtcNow;
 
-            // Add 10 entries
+            // Add 10 entries - LogSyncStart inserts at index 0, so newest first
             for (int i = 1; i <= 10; i++)
             {
                 syncLogger.LogSyncStart($"conf{i}", now.AddDays(-i));
@@ -131,9 +131,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert
             Assert.Equal(5, history.Count);
-            // Should get the 5 most recent
-            Assert.Equal("conf1", history[0].ConferenceAcronym);
-            Assert.Equal("conf5", history[4].ConferenceAcronym);
+            // After trimming, the 5 most recent entries are kept (inserted at index 0 each time)
+            Assert.Equal("conf10", history[0].ConferenceAcronym);
+            Assert.Equal("conf6", history[4].ConferenceAcronym);
         }
 
         [Fact]

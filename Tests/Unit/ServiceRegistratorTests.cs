@@ -78,7 +78,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
             
             // Assert
-            var descriptor = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(UserDataManager));
+            var descriptor = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(IUserDataManager));
             Assert.NotNull(descriptor);
             Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
         }

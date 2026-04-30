@@ -143,10 +143,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             {
                 await HandleDownloadErrorAsync(item, ex).ConfigureAwait(false);
             }
-            catch (TaskCanceledException ex)
-            {
-                await HandleDownloadErrorAsync(item, ex).ConfigureAwait(false);
-            }
             catch (IOException ex)
             {
                 await HandleDownloadErrorAsync(item, ex).ConfigureAwait(false);
@@ -170,7 +166,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             await _queue.MarkFailedAsync(item.Id, errorMessage).ConfigureAwait(false);
         }
 
-        private async Task CleanupFailedDownloadAsync(DownloadQueueItem item, string errorMessage)
+        private Task CleanupFailedDownloadAsync(DownloadQueueItem item, string errorMessage)
         {
             try
             {
@@ -184,6 +180,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             {
                 _logger.LogWarning(cleanupEx, "Failed to delete partial download: {Path}", item.DestinationPath);
             }
+
+            return Task.CompletedTask;
         }
     }
 }

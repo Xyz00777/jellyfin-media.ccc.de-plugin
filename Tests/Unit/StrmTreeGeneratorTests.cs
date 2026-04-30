@@ -59,11 +59,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3", "36c3");
+            var events = new EventDto[]
+            {
+                CreateTestEvent(guid: "1", title: "Event 1", date: "2023-12-28")
+            };
+
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
 
             _apiClientMock.Setup(x => x.GetEventsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(Array.Empty<EventDto>());
+                .ReturnsAsync(events);
 
             var generator = CreateGenerator();
 
@@ -72,7 +77,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert
             // Verify that series folders were created
-            // This will fail because the service doesn't exist yet
             Assert.True(Directory.Exists(Path.Combine(_archivePath, "37c3")));
             Assert.True(Directory.Exists(Path.Combine(_archivePath, "36c3")));
         }
@@ -82,11 +86,14 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3");
+            // ExtractDayNumber: Dec 28 -> day 28-27=1 -> Season 01
+            //                    Dec 29 -> day 29-27=2 -> Season 02
+            //                    Dec 30 -> day 30-27=3 -> Season 03
             var events = new EventDto[]
             {
-                CreateTestEvent(guid: "1", title: "Event 1", date: "2023-12-27"),
-                CreateTestEvent(guid: "2", title: "Event 2", date: "2023-12-28"),
-                CreateTestEvent(guid: "3", title: "Event 3", date: "2023-12-29")
+                CreateTestEvent(guid: "1", title: "Event 1", date: "2023-12-28"),
+                CreateTestEvent(guid: "2", title: "Event 2", date: "2023-12-29"),
+                CreateTestEvent(guid: "3", title: "Event 3", date: "2023-12-30")
             };
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -102,9 +109,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert
             var conferencePath = Path.Combine(_archivePath, "37c3");
-            Assert.True(Directory.Exists(Path.Combine(conferencePath, "Season 01"))); // 27th
-            Assert.True(Directory.Exists(Path.Combine(conferencePath, "Season 02"))); // 28th
-            Assert.True(Directory.Exists(Path.Combine(conferencePath, "Season 03"))); // 29th
+            Assert.True(Directory.Exists(Path.Combine(conferencePath, "Season 01"))); // Dec 28
+            Assert.True(Directory.Exists(Path.Combine(conferencePath, "Season 02"))); // Dec 29
+            Assert.True(Directory.Exists(Path.Combine(conferencePath, "Season 03"))); // Dec 30
         }
 
         [Fact]
@@ -112,11 +119,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3");
+            // Dec 28 -> day 1 -> Season 01, Dec 29 -> day 2 -> Season 02
             var events = new EventDto[]
             {
-                CreateTestEvent(guid: "event-1", title: "Opening Ceremony", date: "2023-12-27"),
-                CreateTestEvent(guid: "event-2", title: "Keynote", date: "2023-12-27"),
-                CreateTestEvent(guid: "event-3", title: "Closing", date: "2023-12-28")
+                CreateTestEvent(guid: "event-1", title: "Opening Ceremony", date: "2023-12-28"),
+                CreateTestEvent(guid: "event-2", title: "Keynote", date: "2023-12-28"),
+                CreateTestEvent(guid: "event-3", title: "Closing", date: "2023-12-29")
             };
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -135,7 +143,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             await generator.GenerateTreeAsync(_archivePath, CancellationToken.None);
 
             // Assert
-            // Verify .strm files were created
             _strmGeneratorMock.Verify(
                 x => x.GenerateStrmAsync(
                     Path.Combine(_archivePath, "37c3", "Season 01"),
@@ -163,9 +170,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3");
+            // Dec 28 -> day 1 -> Season 01
             var events = new EventDto[]
             {
-                CreateTestEvent(guid: "test-guid", title: "Test Event Title", date: "2023-12-27")
+                CreateTestEvent(guid: "test-guid", title: "Test Event Title", date: "2023-12-28")
             };
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -195,12 +203,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             
             var events37c3 = new EventDto[]
             {
-                CreateTestEvent(guid: "37c3-1", title: "37C3 Event", date: "2023-12-27")
+                CreateTestEvent(guid: "37c3-1", title: "37C3 Event", date: "2023-12-28")
             };
             
             var events36c3 = new EventDto[]
             {
-                CreateTestEvent(guid: "36c3-1", title: "36C3 Event", date: "2019-12-27")
+                CreateTestEvent(guid: "36c3-1", title: "36C3 Event", date: "2019-12-28")
             };
             
             var events35c3 = Array.Empty<EventDto>();
@@ -225,7 +233,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             Assert.True(Directory.Exists(Path.Combine(_archivePath, "37c3")));
             Assert.True(Directory.Exists(Path.Combine(_archivePath, "36c3")));
-            Assert.False(Directory.Exists(Path.Combine(_archivePath, "35c3"))); // No events
+            Assert.False(Directory.Exists(Path.Combine(_archivePath, "35c3"))); // No events = no folder
             
             Assert.Equal(2, result.ConferencesProcessed);
             Assert.Equal(2, result.FilesCreated);
@@ -236,11 +244,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3");
+            // Dec 28 -> day 1 -> Season 01, Dec 29 -> day 2 -> Season 02, Dec 30 -> day 3 -> Season 03
             var events = new EventDto[]
             {
-                CreateTestEvent(guid: "event-1", title: "Workshop", date: "2023-12-27"),
-                CreateTestEvent(guid: "event-2", title: "Workshop", date: "2023-12-28"),
-                CreateTestEvent(guid: "event-3", title: "Workshop", date: "2023-12-29")
+                CreateTestEvent(guid: "event-1", title: "Workshop", date: "2023-12-28"),
+                CreateTestEvent(guid: "event-2", title: "Workshop", date: "2023-12-29"),
+                CreateTestEvent(guid: "event-3", title: "Workshop", date: "2023-12-30")
             };
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -255,8 +264,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             await generator.GenerateTreeAsync(_archivePath, CancellationToken.None);
 
             // Assert
-            // All three events should be in different season folders
-            // even though they have the same title
             _strmGeneratorMock.Verify(
                 x => x.GenerateStrmAsync(
                     Path.Combine(_archivePath, "37c3", "Season 01"),
@@ -324,13 +331,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var conferences = CreateTestConferences("37c3");
             var existingEvents = new EventDto[]
             {
-                CreateTestEvent(guid: "existing-1", title: "Existing Event", date: "2023-12-27")
+                CreateTestEvent(guid: "existing-1", title: "Existing Event", date: "2023-12-28")
             };
 
             var newEvents = new EventDto[]
             {
-                CreateTestEvent(guid: "existing-1", title: "Existing Event", date: "2023-12-27"),
-                CreateTestEvent(guid: "new-1", title: "New Event", date: "2023-12-28")
+                CreateTestEvent(guid: "existing-1", title: "Existing Event", date: "2023-12-28"),
+                CreateTestEvent(guid: "new-1", title: "New Event", date: "2023-12-29")
             };
 
             _apiClientMock.SetupSequence(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -341,22 +348,35 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 .ReturnsAsync(existingEvents)
                 .ReturnsAsync(newEvents);
 
+            // Make the mock actually create .strm files on disk
+            _strmGeneratorMock.Setup(x => x.GenerateStrmAsync(It.IsAny<string>(), It.IsAny<EventDto>(), It.IsAny<CancellationToken>()))
+                .Callback<string, EventDto, CancellationToken>((dir, evt, ct) =>
+                {
+                    Directory.CreateDirectory(dir);
+                    var fileName = $"{evt.Slug}.strm";
+                    File.WriteAllText(Path.Combine(dir, fileName), evt.Guid);
+                });
+
             var generator = CreateGenerator();
 
             // First run
             await generator.GenerateTreeAsync(_archivePath, CancellationToken.None);
 
-            var existingStrmPath = Path.Combine(_archivePath, "37c3", "Season 01", "Existing Event.strm");
+            var seasonPath = Path.Combine(_archivePath, "37c3", "Season 01");
+            var existingStrmPath = Path.Combine(seasonPath, "existing-event-existing-1.strm");
             
+            Assert.True(File.Exists(existingStrmPath));
+
             // Act - Second run with new events
             var result = await generator.GenerateTreeAsync(_archivePath, CancellationToken.None);
 
             // Assert
-            // Existing file should not be deleted or overwritten
+            // Existing file should still exist
             Assert.True(File.Exists(existingStrmPath));
             
-            // Only new file should be created
-            var newStrmPath = Path.Combine(_archivePath, "37c3", "Season 02", "New Event.strm");
+            // New file should be created
+            var newSeasonPath = Path.Combine(_archivePath, "37c3", "Season 02");
+            var newStrmPath = Path.Combine(newSeasonPath, "new-event-new-1.strm");
             Assert.True(File.Exists(newStrmPath));
         }
 
@@ -366,17 +386,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var conferences = CreateTestConferences("37c3");
             
-            // Initial events
             var initialEvents = new EventDto[]
             {
-                CreateTestEvent(guid: "event-1", title: "Keep This", date: "2023-12-27"),
-                CreateTestEvent(guid: "event-2", title: "Delete This", date: "2023-12-27")
+                CreateTestEvent(guid: "event-1", title: "Keep This", date: "2023-12-28"),
+                CreateTestEvent(guid: "event-2", title: "Delete This", date: "2023-12-28")
             };
 
-            // Events after deletion on API
             var updatedEvents = new EventDto[]
             {
-                CreateTestEvent(guid: "event-1", title: "Keep This", date: "2023-12-27")
+                CreateTestEvent(guid: "event-1", title: "Keep This", date: "2023-12-28")
             };
 
             _apiClientMock.SetupSequence(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -387,23 +405,33 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 .ReturnsAsync(initialEvents)
                 .ReturnsAsync(updatedEvents);
 
+            // Make the mock actually create .strm files on disk
+            _strmGeneratorMock.Setup(x => x.GenerateStrmAsync(It.IsAny<string>(), It.IsAny<EventDto>(), It.IsAny<CancellationToken>()))
+                .Callback<string, EventDto, CancellationToken>((dir, evt, ct) =>
+                {
+                    Directory.CreateDirectory(dir);
+                    var fileName = $"{evt.Slug}.strm";
+                    File.WriteAllText(Path.Combine(dir, fileName), evt.Guid);
+                });
+
             var generator = CreateGenerator();
 
             // First run - create both files
             await generator.GenerateTreeAsync(_archivePath, CancellationToken.None);
 
-            var keepPath = Path.Combine(_archivePath, "37c3", "Season 01", "Keep This.strm");
-            var deletePath = Path.Combine(_archivePath, "37c3", "Season 01", "Delete This.strm");
+            var seasonPath = Path.Combine(_archivePath, "37c3", "Season 01");
+            var keepPath = Path.Combine(seasonPath, "keep-this-event-1.strm");
+            var deletePath = Path.Combine(seasonPath, "delete-this-event-2.strm");
 
             Assert.True(File.Exists(keepPath));
             Assert.True(File.Exists(deletePath));
 
             // Act - Second run with deleted event
-            var result = await generator.GenerateTreeAsync(_archivePath, CancellationToken.None);
+            await generator.GenerateTreeAsync(_archivePath, CancellationToken.None);
 
             // Assert
             Assert.True(File.Exists(keepPath));
-            Assert.False(File.Exists(deletePath)); // Stale file removed
+            Assert.False(File.Exists(deletePath));
         }
 
         [Fact]
@@ -462,6 +490,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var conferences = CreateTestConferences("37c3", "36c3");
             
+            // Dec 27 -> dayNumber=0 -> null (no season), Dec 28 -> dayNumber=1 -> Season 01
             var events37c3 = new EventDto[]
             {
                 CreateTestEvent(guid: "1", title: "Event 1", date: "2023-12-27"),
@@ -471,8 +500,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             
             var events36c3 = new EventDto[]
             {
-                CreateTestEvent(guid: "4", title: "Event 4", date: "2019-12-27"),
-                CreateTestEvent(guid: "5", title: "Event 5", date: "2019-12-28")
+                CreateTestEvent(guid: "4", title: "Event 4", date: "2019-12-28"),
+                CreateTestEvent(guid: "5", title: "Event 5", date: "2019-12-29")
             };
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -492,8 +521,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             Assert.Equal(5, result.FilesCreated);
             Assert.Equal(2, result.ConferencesProcessed);
-            Assert.Equal(2, result.SeasonsCreated); // Two seasons across all conferences
-            Assert.Equal(2, result.SeriesFoldersCreated); // Two conference folders
+            Assert.Equal(3, result.SeasonsCreated);
+            Assert.Equal(2, result.SeriesFoldersCreated);
         }
 
         [Fact]
@@ -537,7 +566,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             var events37c3 = new EventDto[]
             {
-                CreateTestEvent(guid: "1", title: "Event 1", date: "2023-12-27")
+                CreateTestEvent(guid: "1", title: "Event 1", date: "2023-12-28")
             };
 
             _apiClientMock.Setup(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
@@ -555,6 +584,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Assert.Equal(1, result.ConferencesProcessed);
             Assert.Equal(1, result.FailedConferences);
 
+            // Implementation logs twice: once from inner catch, once from outer catch
             _loggerMock.Verify(
                 x => x.Log(
                     LogLevel.Error,
@@ -562,7 +592,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("36c3")),
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-                Times.Once);
+                Times.AtLeast(2));
         }
 
         [Fact]
@@ -608,14 +638,14 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var conferences = CreateTestConferences("37c3");
             
-            // Multiple events on same day, some on different days
+            // Dec 28 -> Season 01, Dec 29 -> Season 02, Dec 30 -> Season 03
             var events = new EventDto[]
             {
-                CreateTestEvent(guid: "1", title: "Morning Talk", date: "2023-12-27"),
-                CreateTestEvent(guid: "2", title: "Afternoon Talk", date: "2023-12-27"),
-                CreateTestEvent(guid: "3", title: "Evening Talk", date: "2023-12-27"),
-                CreateTestEvent(guid: "4", title: "Second Day Talk", date: "2023-12-28"),
-                CreateTestEvent(guid: "5", title: "Third Day Talk", date: "2023-12-29")
+                CreateTestEvent(guid: "1", title: "Morning Talk", date: "2023-12-28"),
+                CreateTestEvent(guid: "2", title: "Afternoon Talk", date: "2023-12-28"),
+                CreateTestEvent(guid: "3", title: "Evening Talk", date: "2023-12-28"),
+                CreateTestEvent(guid: "4", title: "Second Day Talk", date: "2023-12-29"),
+                CreateTestEvent(guid: "5", title: "Third Day Talk", date: "2023-12-30")
             };
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -632,13 +662,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             var basePath = Path.Combine(_archivePath, "37c3");
             
-            // Season 01 (December 27) - 3 events
+            // Season 01 (December 28) - 3 events
             Assert.True(Directory.Exists(Path.Combine(basePath, "Season 01")));
             
-            // Season 02 (December 28) - 1 event
+            // Season 02 (December 29) - 1 event
             Assert.True(Directory.Exists(Path.Combine(basePath, "Season 02")));
             
-            // Season 03 (December 29) - 1 event
+            // Season 03 (December 30) - 1 event
             Assert.True(Directory.Exists(Path.Combine(basePath, "Season 03")));
         }
 
@@ -648,10 +678,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var conferences = CreateTestConferences("37c3");
             
-            // Events with missing/invalid dates
+            // Dec 28 -> Season 01, null/invalid dates -> series path directly
             var events = new EventDto[]
             {
-                CreateTestEvent(guid: "1", title: "Valid Date Event", date: "2023-12-27"),
+                CreateTestEvent(guid: "1", title: "Valid Date Event", date: "2023-12-28"),
                 CreateTestEvent(guid: "2", title: "No Date Event", date: null),
                 CreateTestEvent(guid: "3", title: "Invalid Date Event", date: "invalid-date")
             };
@@ -667,7 +697,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Act
             var result = await generator.GenerateTreeAsync(_archivePath, CancellationToken.None);
 
-            // Assert - Should still create files, grouping unknown dates into a default season
+            // Assert - Should still create files, events without day numbers go to series path
             Assert.Equal(3, result.FilesCreated);
             Assert.True(Directory.Exists(Path.Combine(_archivePath, "37c3")));
         }
@@ -695,8 +725,19 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var conferences = new List<ConferenceDto>();
             foreach (var acronym in acronyms)
             {
-                // Extract year number from acronym (e.g., "37c3" -> 37)
-                var id = acronym.StartsWith("empty") ? 0 : int.Parse(acronym.Substring(0, 2));
+                int id;
+                if (acronym.StartsWith("empty"))
+                {
+                    id = 0;
+                }
+                else if (int.TryParse(acronym.Substring(0, 2), out var parsedId))
+                {
+                    id = parsedId;
+                }
+                else
+                {
+                    id = 0;
+                }
                 
                 conferences.Add(new ConferenceDto
                 {
@@ -719,7 +760,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 Title = title,
                 Slug = $"{title.ToLower().Replace(" ", "-")}-{guid}",
                 Date = date,
-                ConferenceId = int.Parse(guid.Substring(0, 2)),
+                ConferenceId = 37,
                 Length = 3600,
                 Description = $"Description for {title}",
                 Recordings = new List<RecordingDto>

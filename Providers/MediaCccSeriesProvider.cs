@@ -32,7 +32,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
             var result = new MetadataResult<Series>
             {
                 HasMetadata = false,
-                Item = null
+                Item = null!
             };
 
             try

@@ -38,7 +38,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(202)]
         [ProducesResponseType(401)]
         [ProducesResponseType(403)]
-        public async Task<IActionResult> TriggerSync()
+        public IActionResult TriggerSync()
         {
             if (!IsAdmin())
             {

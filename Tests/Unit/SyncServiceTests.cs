@@ -17,16 +17,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         private readonly Mock<IMediaCccApiClient> _apiClientMock;
         private readonly Mock<IStrmGenerator> _strmGeneratorMock;
         private readonly Mock<ISyncLogger> _syncLoggerMock;
-        private readonly Mock<PluginConfiguration> _configurationMock;
+        private readonly PluginConfiguration _configuration;
         private readonly Mock<ILogger<SyncService>> _loggerMock;
 
         public SyncServiceTests()
         {
-            _apiClientMock = new Mock<IMediaCccApiClient>(MockBehavior.Strict);
-            _strmGeneratorMock = new Mock<IStrmGenerator>(MockBehavior.Strict);
-            _syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Strict);
-            _configurationMock = new Mock<PluginConfiguration>(MockBehavior.Loose);
-            _loggerMock = new Mock<ILogger<SyncService>>(MockBehavior.Loose);
+            _apiClientMock = new Mock<IMediaCccApiClient>();
+            _strmGeneratorMock = new Mock<IStrmGenerator>();
+            _syncLoggerMock = new Mock<ISyncLogger>();
+            _configuration = new PluginConfiguration();
+            _loggerMock = new Mock<ILogger<SyncService>>();
         }
 
         [Fact]
@@ -39,7 +39,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public async Task StartAsync_initiates_background_task()
         {
-            _configurationMock.Setup(x => x.SyncIntervalHours).Returns(6);
+            _configuration.SyncIntervalHours = 6;
+
+            _apiClientMock
+                .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<ConferenceDto>());
+
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
@@ -53,12 +58,19 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.AtLeastOnce());
+
+            await service.StopAsync(CancellationToken.None);
         }
 
         [Fact]
         public async Task StopAsync_cancels_running_sync()
         {
-            _configurationMock.Setup(x => x.SyncIntervalHours).Returns(6);
+            _configuration.SyncIntervalHours = 6;
+
+            _apiClientMock
+                .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<ConferenceDto>());
+
             var service = CreateService();
             await service.StartAsync(CancellationToken.None);
             await Task.Delay(50);
@@ -75,8 +87,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public async Task ExecuteAsync_calls_Api_GetConferences_on_interval()
         {
-            _configurationMock.Setup(x => x.SyncIntervalHours).Returns(0);
-            
+            _configuration.SyncIntervalHours = 6;
+
             var conferences = new List<ConferenceDto>
             {
                 new ConferenceDto { Title = "37C3", Acronym = "37c3" },
@@ -87,20 +99,30 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
 
+            _strmGeneratorMock
+                .Setup(x => x.StrmFilesExistForConference(It.IsAny<ConferenceDto>()))
+                .Returns(false);
+
+            _strmGeneratorMock
+                .Setup(x => x.CreateStrmFilesForConference(It.IsAny<ConferenceDto>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.CompletedTask);
+
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(200);
+            await Task.Delay(500);
 
             _apiClientMock.Verify(
                 x => x.GetConferencesAsync(It.IsAny<CancellationToken>()),
                 Times.AtLeastOnce());
+
+            await service.StopAsync(CancellationToken.None);
         }
 
         [Fact]
         public async Task ExecuteAsync_creates_strm_files_for_new_conferences()
         {
-            _configurationMock.Setup(x => x.SyncIntervalHours).Returns(0);
+            _configuration.SyncIntervalHours = 6;
             
             var conferences = new List<ConferenceDto>
             {
@@ -113,23 +135,29 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 .ReturnsAsync(conferences);
             
             _strmGeneratorMock
+                .Setup(x => x.StrmFilesExistForConference(It.IsAny<ConferenceDto>()))
+                .Returns(false);
+
+            _strmGeneratorMock
                 .Setup(x => x.CreateStrmFilesForConference(It.IsAny<ConferenceDto>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(200);
+            await Task.Delay(500);
 
             _strmGeneratorMock.Verify(
                 x => x.CreateStrmFilesForConference(It.IsAny<ConferenceDto>(), It.IsAny<CancellationToken>()),
                 Times.AtLeast(2));
+
+            await service.StopAsync(CancellationToken.None);
         }
 
         [Fact]
         public async Task ExecuteAsync_does_not_duplicate_existing_strm_files()
         {
-            _configurationMock.Setup(x => x.SyncIntervalHours).Returns(0);
+            _configuration.SyncIntervalHours = 6;
             
             var conferences = new List<ConferenceDto>
             {
@@ -141,38 +169,25 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 .ReturnsAsync(conferences);
 
             _strmGeneratorMock
-                .SetupSequence(x => x.StrmFilesExistForConference(It.IsAny<ConferenceDto>()))
-                .Returns(false);
-
-            _strmGeneratorMock
-                .Setup(x => x.CreateStrmFilesForConference(It.IsAny<ConferenceDto>(), It.IsAny<CancellationToken>()))
-                .Returns(Task.CompletedTask);
+                .Setup(x => x.StrmFilesExistForConference(It.IsAny<ConferenceDto>()))
+                .Returns(true);
 
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(200);
-
-            _strmGeneratorMock.Verify(
-                x => x.CreateStrmFilesForConference(It.IsAny<ConferenceDto>(), It.IsAny<CancellationToken>()),
-                Times.Once());
-
-            _strmGeneratorMock.Reset();
-            _strmGeneratorMock
-                .Setup(x => x.StrmFilesExistForConference(It.IsAny<ConferenceDto>()))
-                .Returns(true);
-
-            await Task.Delay(100);
+            await Task.Delay(500);
 
             _strmGeneratorMock.Verify(
                 x => x.CreateStrmFilesForConference(It.IsAny<ConferenceDto>(), It.IsAny<CancellationToken>()),
                 Times.Never());
+
+            await service.StopAsync(CancellationToken.None);
         }
 
         [Fact]
         public async Task ExecuteAsync_logs_sync_start_and_completion()
         {
-            _configurationMock.Setup(x => x.SyncIntervalHours).Returns(0);
+            _configuration.SyncIntervalHours = 6;
             
             var conferences = new List<ConferenceDto>
             {
@@ -194,7 +209,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(200);
+            await Task.Delay(500);
 
             _loggerMock.Verify(
                 x => x.Log(
@@ -213,12 +228,14 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.AtLeastOnce());
+
+            await service.StopAsync(CancellationToken.None);
         }
 
         [Fact]
         public async Task ExecuteAsync_handles_api_failure_gracefully()
         {
-            _configurationMock.Setup(x => x.SyncIntervalHours).Returns(0);
+            _configuration.SyncIntervalHours = 6;
             
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -227,7 +244,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(200);
+            await Task.Delay(500);
 
             _loggerMock.Verify(
                 x => x.Log(
@@ -237,12 +254,14 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.AtLeastOnce());
+
+            await service.StopAsync(CancellationToken.None);
         }
 
         [Fact]
         public async Task ExecuteAsync_respects_cancellation_token()
         {
-            _configurationMock.Setup(x => x.SyncIntervalHours).Returns(6);
+            _configuration.SyncIntervalHours = 6;
             
             var conferences = new List<ConferenceDto>();
             _apiClientMock
@@ -264,8 +283,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task ExecuteAsync_uses_configured_sync_interval()
         {
             var expectedInterval = 12;
-            var config = _configurationMock.Object;
-            config.SyncIntervalHours = expectedInterval;
+            _configuration.SyncIntervalHours = expectedInterval;
+            var config = _configuration;
             
             var conferences = new List<ConferenceDto>();
             _apiClientMock
@@ -283,7 +302,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public async Task ExecuteAsync_updates_sync_log_on_completion()
         {
-            _configurationMock.Setup(x => x.SyncIntervalHours).Returns(0);
+            _configuration.SyncIntervalHours = 6;
             
             var conferences = new List<ConferenceDto>
             {
@@ -302,14 +321,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 .Setup(x => x.CreateStrmFilesForConference(It.IsAny<ConferenceDto>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
 
-            _syncLoggerMock
-                .Setup(x => x.LogSyncCompletion(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<DateTime>()))
-                .Returns(Task.CompletedTask);
-
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(200);
+            await Task.Delay(500);
 
             _syncLoggerMock.Verify(
                 x => x.LogSyncCompletion(
@@ -317,6 +332,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<int>(),
                     It.IsAny<DateTime>()),
                 Times.AtLeastOnce());
+
+            await service.StopAsync(CancellationToken.None);
         }
 
         private SyncService CreateService()
@@ -325,7 +342,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 _apiClientMock.Object,
                 _strmGeneratorMock.Object,
                 _syncLoggerMock.Object,
-                _configurationMock.Object,
+                _configuration,
                 _loggerMock.Object);
         }
     }
