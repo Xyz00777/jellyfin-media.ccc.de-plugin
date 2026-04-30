@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Concurrent;
 using System.IO;
+using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -27,6 +29,78 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             return _fileLocks.GetOrAdd(destinationPath, _ => new SemaphoreSlim(1, 1));
         }
 
+        private static void ValidateUrl(string url)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                throw new ArgumentException("URL must be a valid absolute URI", nameof(url));
+            }
+
+            if (!string.Equals(uri.Scheme, "https", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("Only HTTPS URLs are allowed", nameof(url));
+            }
+
+            if (IsPrivateOrLoopbackHost(uri.Host))
+            {
+                throw new ArgumentException("URLs pointing to private or loopback addresses are not allowed", nameof(url));
+            }
+        }
+
+        private static bool IsPrivateOrLoopbackHost(string host)
+        {
+            if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (IPAddress.TryParse(host, out var address))
+            {
+                return IsPrivateOrLoopbackAddress(address);
+            }
+
+            if (Uri.CheckHostName(host) == UriHostNameType.IPv6 && IPAddress.TryParse(host, out var ipv6Addr))
+            {
+                return IsPrivateOrLoopbackAddress(ipv6Addr);
+            }
+
+            return false;
+        }
+
+        private static bool IsPrivateOrLoopbackAddress(IPAddress address)
+        {
+            if (address.AddressFamily == AddressFamily.InterNetwork)
+            {
+                var bytes = address.GetAddressBytes();
+                // 127.0.0.0/8
+                if (bytes[0] == 127) return true;
+                // 10.0.0.0/8
+                if (bytes[0] == 10) return true;
+                // 172.16.0.0/12
+                if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true;
+                // 192.168.0.0/16
+                if (bytes[0] == 192 && bytes[1] == 168) return true;
+                // 169.254.0.0/16
+                if (bytes[0] == 169 && bytes[1] == 254) return true;
+                return false;
+            }
+
+            if (address.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                return address.Equals(IPAddress.IPv6Loopback);
+            }
+
+            return false;
+        }
+
+        private static void ValidateDestinationPath(string destinationPath)
+        {
+            if (destinationPath.Contains(".."))
+            {
+                throw new ArgumentException("Destination path cannot contain path traversal sequences", nameof(destinationPath));
+            }
+        }
+
         public async Task<string> DownloadFileAsync(string url, string destinationPath, IProgress<double>? progress, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(url))
@@ -38,6 +112,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 throw new ArgumentException("Destination path cannot be null or empty", nameof(destinationPath));
             }
 
+            ValidateUrl(url);
+            ValidateDestinationPath(destinationPath);
+
             cancellationToken.ThrowIfCancellationRequested();
 
             var directory = Path.GetDirectoryName(destinationPath);
@@ -47,6 +124,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             }
 
             var fileLock = GetFileLock(destinationPath);
+            var tempPath = destinationPath + ".tmp";
 
             await fileLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -62,7 +140,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 var downloadedBytes = 0L;
                 var lastReportedProgress = 0.0;
 
-                await using var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize, FileOptions.Asynchronous);
+                await using var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize, FileOptions.Asynchronous);
                 await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
                 var buffer = new byte[BufferSize];
                 int bytesRead;
@@ -85,10 +163,21 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                     }
                 }
 
+                await fileStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                fileStream.Close();
+
+                File.Move(tempPath, destinationPath, overwrite: true);
+
                 if (progress != null && totalBytes <= 0)
                 {
                     progress.Report(1.0);
                 }
+            }
+            catch
+            {
+                // Clean up temp file on failure
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+                throw;
             }
             finally
             {
@@ -104,6 +193,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             {
                 throw new ArgumentException("URL cannot be null or empty", nameof(url));
             }
+
+            ValidateUrl(url);
 
             var httpClient = _httpClientFactory.CreateClient(HttpClientName);
             var request = new HttpRequestMessage(HttpMethod.Head, url);

@@ -52,3 +52,51 @@
 ### Potential Gotchas
 - HashSet deserialization: If deserializing a JSON with duplicate keys into `HashSet<string>`, `System.Text.Json` will call `Add()` which silently ignores duplicates. No data loss, but the dedup happens silently.
 - HashSet order is implementation-dependent: While .NET Core's `HashSet<T>` currently preserves insertion order for non-removed items, this is NOT contractual. Don't rely on it.
+
+## P1-2: SSRF & Path Traversal Security Fixes (FileService.cs)
+
+### Changes Made
+1. **SSRF Prevention - URL Scheme Validation**: `ValidateUrl()` rejects non-HTTPS schemes (http, ftp, file://, etc.)
+2. **SSRF Prevention - Private IP Blocking**: `IsPrivateOrLoopbackHost()` + `IsPrivateOrLoopbackAddress()` blocks 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, ::1, and "localhost"
+3. **Path Traversal Prevention**: `ValidateDestinationPath()` rejects any destination path containing ".."
+4. **Atomic File Writes**: Download now writes to `.tmp` file first, then `File.Move()` with overwrite — prevents partial/corrupt files on failure
+5. **Temp File Cleanup**: On exception, `.tmp` file is deleted in catch block
+
+### Key Decisions
+- **`IFileService` interface unchanged**: All validation is internal implementation detail
+- **Validation runs before HTTP call**: ArgumentException thrown immediately without creating HttpClient
+- **`ValidateUrl()` shared by both `DownloadFileAsync` and `GetFileSizeAsync`**: Both methods get SSRF protection
+- **Atomic write uses `destinationPath + ".tmp"`**: Simple suffix, cleaned up on failure, uses `File.Move` with overwrite
+- **CIDR range comments preserved**: Byte-level IP range checks require CIDR annotation for readability (security-critical code)
+
+### TDD Results
+- 4 new test methods (16 total test cases with [Theory]):
+  - `DownloadFileAsync_rejects_non_https_urls` (4 cases: http, ftp, file, empty)
+  - `DownloadFileAsync_rejects_localhost_urls` (7 cases: 127.0.0.1, localhost, 10.x, 172.16.x, 192.168.x, 169.254.x, ::1)
+  - `DownloadFileAsync_rejects_path_traversal_destination` (4 cases: ..\, ../, subdir/../.., windows traversal)
+  - `DownloadFileAsync_writes_atomically` (verification: file exists, no .tmp leftover, correct content)
+- All 457 tests pass (441 existing + 16 new)
+
+## P1-4: Path Traversal Fix in UserLibraryService + WatchlistPath Platform Fix
+
+### Changes Made
+1. **SanitizeUsername path traversal fix**: Added `..` sequence stripping (repeated until no `..` remains), dot-only input detection (`.` → "unknown"), and max length truncation (64 chars).
+2. **SanitizeUsername visibility**: Changed from `private` to `internal` with `[InternalsVisibleTo("MediaCccDe.Tests")]` in main csproj to enable direct unit testing.
+3. **GetWatchlistBasePath visibility**: Changed from `private` to `internal` for testability.
+4. **PluginConfiguration.WatchlistPath default**: Changed from hardcoded `"/config/plugins/ccc-media/watchlists/"` to `string.Empty`. The service's `GetWatchlistBasePath()` already uses `IApplicationPaths.PluginConfigurationsPath` which is platform-aware.
+
+### Vulnerability Details
+- **Original bug**: `SanitizeUsername` stripped `/` and `\` as individual characters but NOT the `..` sequence. Input like `"../etc/passwd"` → `"..etcpasswd"` — still contains `..`. Input like `".."` → `".."` — passed through completely unsanitized.
+- **WatchlistPath**: Hardcoded Linux path `/config/plugins/ccc-media/watchlists/` doesn't exist on Windows/macOS. Fixed by making default empty and deriving from `IApplicationPaths.PluginConfigurationsPath`.
+
+### Security Comments
+- Added 3 inline comments in SanitizeUsername for security-critical logic: `..` stripping, dot-only check, length truncation. These are necessary because the defense-in-depth reasoning is not obvious from code alone.
+
+### TDD Results
+- 5 RED tests failed (3 path traversal cases, 1 `..` alone, 1 length truncation)
+- All 458 tests pass after fixes (457 existing + 7 new: `SanitizeUsername_rejects_dot_dot_sequences`, `SanitizeUsername_blocks_path_traversal` [4 Theory cases], `SanitizeUsername_rejects_path_separators` [4 Theory cases], `SanitizeUsername_handles_empty_and_whitespace` [4 Theory cases], `SanitizeUsername_truncates_long_input`, `GetOrCreateUserLibraryAsync_creates_directory_atomically`, `GetWatchlistBasePath_uses_PluginConfigurationsPath`)
+- Note: test count increased from 457 to 458 (total test cases including Theory expansions is higher)
+
+### Potential Gotchas
+- `[InternalsVisibleTo]` in csproj requires the test project assembly name to match exactly. The test project's assembly name is `MediaCccDe.Tests` (set via `AssemblyName` derived from project name `MediaCccDe.Tests`).
+- The `while (sanitized.Contains(".."))` loop is intentional: `Replace("..", "")` on `"..."` → `"."`, but a single pass on `"...` would leave `"."`. Repeated replacement handles edge cases like `"...."`.

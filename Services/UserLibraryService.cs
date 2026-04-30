@@ -135,8 +135,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             await Task.CompletedTask.ConfigureAwait(false);
         }
 
-        private string SanitizeUsername(string username)
+        internal string SanitizeUsername(string username)
         {
+            const int MaxLength = 64;
+
             if (string.IsNullOrWhiteSpace(username))
             {
                 return "unknown";
@@ -156,10 +158,28 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 c != '*')
                 .ToArray());
 
-            return string.IsNullOrWhiteSpace(sanitized) ? "unknown" : sanitized;
+            // Strip parent-directory traversal sequences (..) repeatedly
+            while (sanitized.Contains(".."))
+            {
+                sanitized = sanitized.Replace("..", string.Empty);
+            }
+
+            // Handle dot-only input (e.g., "." after .. stripping becomes empty)
+            if (string.IsNullOrWhiteSpace(sanitized) || sanitized.Trim('.').Length == 0)
+            {
+                return "unknown";
+            }
+
+            // Truncate to maximum length
+            if (sanitized.Length > MaxLength)
+            {
+                sanitized = sanitized.Substring(0, MaxLength);
+            }
+
+            return sanitized;
         }
 
-        private string GetWatchlistBasePath()
+        internal string GetWatchlistBasePath()
         {
             return Path.Combine(_applicationPaths.PluginConfigurationsPath, "ccc-media", "watchlists");
         }

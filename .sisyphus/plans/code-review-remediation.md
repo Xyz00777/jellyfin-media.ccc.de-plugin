@@ -39,7 +39,7 @@
   - Acceptance: All model tests pass, no invalid default states possible
   - _Files_: All 11 model/DTO files, `DtoTests.cs` updates
 
-- [ ] **P1-3: Replace `List<string>` with `HashSet<string>` in UserData**
+- [x] **P1-3: Replace `List<string>` with `HashSet<string>` in UserData**
   - `Watchlist`, `SearchProgress`, `PreferredAudioLanguages`, `PreferredSubtitleLanguages`
   - O(n) → O(1) lookup performance
   - Acceptance: All `UserDataManagerTests` pass with HashSet, no behavioral change

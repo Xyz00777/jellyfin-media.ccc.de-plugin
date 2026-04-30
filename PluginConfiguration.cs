@@ -5,7 +5,7 @@ namespace Jellyfin.Plugin.MediaCccDe
 {
     public class PluginConfiguration : BasePluginConfiguration
     {
-        public string WatchlistPath { get; set; } = "/config/plugins/ccc-media/watchlists/";
+        public string WatchlistPath { get; set; } = string.Empty;
         public string PreferredQuality { get; set; } = "hd";
         public List<string> PreferredAudioLanguages { get; set; } = new List<string>();
         public List<string> PreferredSubtitleLanguages { get; set; } = new List<string>();

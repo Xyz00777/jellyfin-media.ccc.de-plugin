@@ -465,6 +465,123 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Assert.DoesNotContain("/", result.LibraryName);
         }
 
+        [Fact]
+        public void SanitizeUsername_rejects_dot_dot_sequences()
+        {
+            var service = CreateService();
+            var result = service.SanitizeUsername("..");
+            Assert.NotEqual("..", result);
+            Assert.DoesNotContain("..", result);
+        }
+
+        [Theory]
+        [InlineData("../etc/passwd")]
+        [InlineData("..\\windows\\system32")]
+        [InlineData("user..traversal")]
+        [InlineData(".")]
+        public void SanitizeUsername_blocks_path_traversal(string input)
+        {
+            var service = CreateService();
+            var result = service.SanitizeUsername(input);
+            Assert.DoesNotContain("..", result);
+            Assert.NotEmpty(result);
+        }
+
+        [Theory]
+        [InlineData("/")]
+        [InlineData("\\")]
+        [InlineData("user/name")]
+        [InlineData("user\\name")]
+        public void SanitizeUsername_rejects_path_separators(string input)
+        {
+            var service = CreateService();
+            var result = service.SanitizeUsername(input);
+            Assert.DoesNotContain("/", result);
+            Assert.DoesNotContain("\\", result);
+            Assert.NotEmpty(result);
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("   ")]
+        [InlineData("\t")]
+        [InlineData("\n")]
+        public void SanitizeUsername_handles_empty_and_whitespace(string input)
+        {
+            var service = CreateService();
+            var result = service.SanitizeUsername(input);
+            Assert.Equal("unknown", result);
+        }
+
+        [Fact]
+        public void SanitizeUsername_truncates_long_input()
+        {
+            var service = CreateService();
+            var longUsername = new string('a', 200);
+            var result = service.SanitizeUsername(longUsername);
+            Assert.True(result.Length <= 64, $"Expected length <= 64 but got {result.Length}");
+        }
+
+        [Fact]
+        public async Task GetOrCreateUserLibraryAsync_creates_directory_atomically()
+        {
+            // Arrange
+            var userId = Guid.NewGuid();
+            var username = "atomicuser";
+            var expectedLibraryName = $"{username}'s Watchlist";
+            var libraryId = Guid.NewGuid();
+
+            _libraryManagerMock
+                .SetupSequence(x => x.GetVirtualFolders())
+                .Returns(new List<VirtualFolderInfo>())
+                .Returns(new List<VirtualFolderInfo>
+                {
+                    new VirtualFolderInfo
+                    {
+                        Name = expectedLibraryName,
+                        ItemId = libraryId.ToString(),
+                        Locations = new[] { Path.Combine(_testBasePath, "ccc-media", "watchlists", username) + Path.DirectorySeparatorChar }
+                    }
+                });
+
+            _libraryManagerMock
+                .Setup(x => x.AddVirtualFolder(
+                    It.IsAny<string>(),
+                    It.IsAny<CollectionTypeOptions?>(),
+                    It.IsAny<LibraryOptions>(),
+                    It.IsAny<bool>()));
+
+            var mockUser = CreateUser(username, userId);
+            _userManagerMock
+                .Setup(x => x.GetUserById(userId))
+                .Returns(mockUser);
+
+            var service = CreateService();
+
+            // Act
+            var result = await service.GetOrCreateUserLibraryAsync(userId, username);
+
+            // Assert
+            Assert.NotNull(result);
+            Assert.Equal(expectedLibraryName, result.LibraryName);
+            _libraryManagerMock.Verify(
+                x => x.AddVirtualFolder(
+                    expectedLibraryName,
+                    CollectionTypeOptions.movies,
+                    It.IsAny<LibraryOptions>(),
+                    It.IsAny<bool>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public void GetWatchlistBasePath_uses_PluginConfigurationsPath()
+        {
+            var service = CreateService();
+            var result = service.GetWatchlistBasePath();
+            Assert.StartsWith(_testBasePath, result);
+            Assert.DoesNotContain("/config/", result);
+        }
+
         private User CreateUser(string username, Guid userId)
         {
             var user = new User(username, "Default", "Default");

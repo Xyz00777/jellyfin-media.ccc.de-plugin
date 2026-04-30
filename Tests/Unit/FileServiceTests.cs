@@ -689,6 +689,89 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
         #endregion
 
+        #region SSRF and Path Traversal Security Tests
+
+        [Theory]
+        [InlineData("http://example.com/video.mp4")]
+        [InlineData("ftp://example.com/video.mp4")]
+        [InlineData("file:///etc/passwd")]
+        [InlineData("")]
+        public async Task DownloadFileAsync_rejects_non_https_urls(string url)
+        {
+            // Arrange
+            var destination = Path.Combine(_testDownloadPath, "video.mp4");
+
+            // Act & Assert - Should reject http, ftp, file, and empty schemes
+            var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+                _fileService.DownloadFileAsync(url, destination, null, CancellationToken.None));
+            Assert.Equal("url", ex.ParamName);
+        }
+
+        [Theory]
+        [InlineData("https://127.0.0.1/video.mp4")]
+        [InlineData("https://localhost/video.mp4")]
+        [InlineData("https://10.0.0.1/video.mp4")]
+        [InlineData("https://172.16.0.1/video.mp4")]
+        [InlineData("https://192.168.1.1/video.mp4")]
+        [InlineData("https://169.254.1.1/video.mp4")]
+        [InlineData("https://[::1]/video.mp4")]
+        public async Task DownloadFileAsync_rejects_localhost_urls(string url)
+        {
+            // Arrange
+            var destination = Path.Combine(_testDownloadPath, "video.mp4");
+
+            // Act & Assert - Should reject private/loopback IPs
+            var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+                _fileService.DownloadFileAsync(url, destination, null, CancellationToken.None));
+            Assert.Equal("url", ex.ParamName);
+        }
+
+        [Theory]
+        [InlineData("..\\secret\\file.txt")]
+        [InlineData("../secret/file.txt")]
+        [InlineData("subdir/../../etc/passwd")]
+        [InlineData("..\\..\\windows\\system32")]
+        public async Task DownloadFileAsync_rejects_path_traversal_destination(string destinationPath)
+        {
+            // Arrange
+            var url = "https://example.com/video.mp4";
+
+            // Act & Assert - Should reject destination paths with .. traversal
+            var ex = await Assert.ThrowsAsync<ArgumentException>(() =>
+                _fileService.DownloadFileAsync(url, destinationPath, null, CancellationToken.None));
+            Assert.Equal("destinationPath", ex.ParamName);
+        }
+
+        [Fact]
+        public async Task DownloadFileAsync_writes_atomically()
+        {
+            // Arrange
+            var url = "https://example.com/video.mp4";
+            var destination = Path.Combine(_testDownloadPath, "video.mp4");
+            var fileContent = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 };
+            var responseMessage = CreateHttpResponseMessage(fileContent, HttpStatusCode.OK);
+
+            var httpClient = CreateMockHttpClient(responseMessage);
+            _httpClientFactoryMock
+                .Setup(x => x.CreateClient(It.IsAny<string>()))
+                .Returns(httpClient);
+
+            // Act
+            await _fileService.DownloadFileAsync(url, destination, null, CancellationToken.None);
+
+            // Assert - File should exist at destination (was moved from temp)
+            Assert.True(File.Exists(destination), "Destination file should exist after atomic write");
+
+            // Assert - No temp file should be leftover
+            Assert.False(File.Exists(destination + ".tmp"), "Temp file should not remain after atomic write");
+
+            // Assert - Content should be correct
+            var downloadedContent = await File.ReadAllBytesAsync(destination);
+            Assert.Equal(fileContent, downloadedContent);
+        }
+
+        #endregion
+
         #region Helper Methods
 
         private HttpResponseMessage CreateHttpResponseMessage(byte[] content, HttpStatusCode statusCode, long? contentLength = null)
