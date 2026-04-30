@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Api;
@@ -16,17 +18,17 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
     /// <summary>
     /// Provides metadata for episodes (talks) from media.ccc.de API.
     /// Episode = Talk from a conference.
-    /// IndexNumber = episode order within day.
+    /// IndexNumber = episode order within day (deterministic hash of GUID).
     /// ParentIndexNumber = day number within conference (season).
     /// </summary>
     public class MediaCccEpisodeProvider : IRemoteMetadataProvider<Episode, EpisodeInfo>
     {
         private readonly IMediaCccApiClient _apiClient;
-        private readonly RecordingSelector _recordingSelector;
+        private readonly IRecordingSelector _recordingSelector;
 
         public string Name => "MediaCccDe Episode";
 
-        public MediaCccEpisodeProvider(IMediaCccApiClient apiClient, RecordingSelector recordingSelector)
+        public MediaCccEpisodeProvider(IMediaCccApiClient apiClient, IRecordingSelector recordingSelector)
         {
             _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
             _recordingSelector = recordingSelector ?? throw new ArgumentNullException(nameof(recordingSelector));
@@ -34,7 +36,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
 
         public async Task<MetadataResult<Episode>> GetMetadata(EpisodeInfo info, CancellationToken cancellationToken)
         {
-            var eventGuid = info.Name;
+            var eventGuid = info.ProviderIds.TryGetValue("MediaCccDe", out var existingId) 
+                ? existingId 
+                : info.Name;
             var eventDto = await _apiClient.GetEventAsync(eventGuid, cancellationToken).ConfigureAwait(false);
 
             if (eventDto == null)
@@ -57,12 +61,23 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
 
         public Task<IEnumerable<RemoteSearchResult>> GetSearchResults(EpisodeInfo searchInfo, CancellationToken cancellationToken)
         {
-            return Task.FromResult(Enumerable.Empty<RemoteSearchResult>());
+            var results = new List<RemoteSearchResult>();
+
+            if (searchInfo.ProviderIds.TryGetValue("MediaCccDe", out var id))
+            {
+                results.Add(new RemoteSearchResult
+                {
+                    Name = searchInfo.Name,
+                    ProviderIds = new Dictionary<string, string> { ["MediaCccDe"] = id }
+                });
+            }
+
+            return Task.FromResult<IEnumerable<RemoteSearchResult>>(results);
         }
 
         public Task<HttpResponseMessage> GetImageResponse(string url, CancellationToken cancellationToken)
         {
-            throw new NotImplementedException("Image response not implemented for episode provider");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
         }
 
         private Episode MapEventToEpisode(EventDto eventDto)
@@ -95,18 +110,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
 
         private int DeriveIndexNumber(EventDto eventDto)
         {
-            if (string.IsNullOrEmpty(eventDto.Slug))
+            if (string.IsNullOrEmpty(eventDto.Guid))
             {
                 return 1;
             }
 
-            var parts = eventDto.Slug.Split('-');
-            if (parts.Length >= 2 && int.TryParse(parts[1], out var eventId))
-            {
-                return (eventId % 100) + 1;
-            }
-
-            return Math.Abs(eventDto.Slug.GetHashCode()) % 100 + 1;
+            // Deterministic: SHA256 hash of the GUID, take first 4 bytes as int, mod 100 + 1
+            // This is stable across process restarts unlike string.GetHashCode()
+            var hashBytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(eventDto.Guid));
+            var hashInt = BitConverter.ToInt32(hashBytes, 0);
+            return Math.Abs(hashInt % 100) + 1;
         }
 
         private int? DeriveParentIndexNumber(EventDto eventDto)
@@ -116,14 +129,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
                 return null;
             }
 
-            var dayOfMonth = eventDate.Day;
-            
-            if (dayOfMonth >= 27 && dayOfMonth <= 31)
+            // CCC congresses start Dec 27: Dec 27 = Day 1, Dec 28 = Day 2, etc.
+            if (eventDate.Month == 12 && eventDate.Day >= 27)
             {
-                return dayOfMonth - 26;
+                return eventDate.Day - 27 + 1;
             }
 
-            return Math.Min(dayOfMonth, 10);
+            // For all other conferences: use day-of-month as season number
+            // (1-indexed, matching Jellyfin's season numbering convention)
+            return eventDate.Day;
         }
     }
 }

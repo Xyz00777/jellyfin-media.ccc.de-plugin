@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Api;
@@ -17,14 +20,14 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
     public class MediaCccEpisodeProviderTests
     {
         private readonly Mock<IMediaCccApiClient> _mockApiClient;
-        private readonly RecordingSelector _recordingSelector;
+        private readonly Mock<IRecordingSelector> _mockRecordingSelector;
         private readonly MediaCccEpisodeProvider _provider;
 
         public MediaCccEpisodeProviderTests()
         {
             _mockApiClient = new Mock<IMediaCccApiClient>();
-            _recordingSelector = new RecordingSelector();
-            _provider = new MediaCccEpisodeProvider(_mockApiClient.Object, _recordingSelector);
+            _mockRecordingSelector = new Mock<IRecordingSelector>();
+            _provider = new MediaCccEpisodeProvider(_mockApiClient.Object, _mockRecordingSelector.Object);
         }
 
         #region GetMetadata Tests
@@ -430,6 +433,260 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert - Provider maps event metadata with recordings preserved in DTO
             Assert.NotNull(result.Item);
+        }
+
+        #endregion
+
+        #region C3: GetMetadata uses ProviderIds for lookup (not Name)
+
+        [Fact]
+        public async Task GetMetadata_uses_provider_id_for_lookup_when_available()
+        {
+            // Arrange - ProviderIds should be the primary lookup key, not Name
+            var eventGuid = "real-guid-123";
+            var talkTitle = "Opening Ceremony";
+            var testEvent = CreateTestEvent();
+            testEvent.Guid = eventGuid;
+            testEvent.Title = talkTitle;
+            var eventDto = CreateEventDto(testEvent);
+
+            // EpisodeInfo has BOTH Name (talk title) and ProviderIds (guid)
+            var episodeInfo = new EpisodeInfo { Name = talkTitle };
+            episodeInfo.ProviderIds["MediaCccDe"] = eventGuid;
+
+            // API should be called with the GUID, not the title
+            _mockApiClient
+                .Setup(x => x.GetEventAsync(eventGuid, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(eventDto);
+
+            // Act
+            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
+
+            // Assert - API must be called with the GUID from ProviderIds
+            _mockApiClient.Verify(
+                x => x.GetEventAsync(eventGuid, It.IsAny<CancellationToken>()),
+                Times.Once);
+            _mockApiClient.Verify(
+                x => x.GetEventAsync(talkTitle, It.IsAny<CancellationToken>()),
+                Times.Never);
+            Assert.True(result.HasMetadata);
+            Assert.Equal(eventGuid, result.Item.ProviderIds["MediaCccDe"]);
+        }
+
+        [Fact]
+        public async Task GetMetadata_falls_back_to_Name_when_no_provider_id()
+        {
+            // Arrange - When ProviderIds has no MediaCccDe entry, fall back to Name
+            var eventSlug = "37c3-12746-opening_ceremony";
+            var testEvent = CreateTestEvent();
+            testEvent.Guid = "some-guid";
+            var eventDto = CreateEventDto(testEvent);
+
+            var episodeInfo = new EpisodeInfo { Name = eventSlug };
+            // No ProviderIds set - should fall back to Name
+
+            _mockApiClient
+                .Setup(x => x.GetEventAsync(eventSlug, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(eventDto);
+
+            // Act
+            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
+
+            // Assert - API called with Name as fallback
+            _mockApiClient.Verify(
+                x => x.GetEventAsync(eventSlug, It.IsAny<CancellationToken>()),
+                Times.Once);
+            Assert.True(result.HasMetadata);
+        }
+
+        #endregion
+
+        #region C4: DeriveIndexNumber is deterministic (stable across calls)
+
+        [Fact]
+        public async Task DeriveIndexNumber_is_stable_across_calls()
+        {
+            // Arrange - Same event must always produce the same IndexNumber.
+            // The old GetHashCode() approach was non-deterministic across restarts.
+            var testEvent = CreateTestEvent();
+            testEvent.Slug = "37c3-12746-opening_ceremony";
+            testEvent.Guid = "abc123-def456-789";
+            var eventDto = CreateEventDto(testEvent);
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
+            episodeInfo.ProviderIds["MediaCccDe"] = testEvent.Guid;
+
+            _mockApiClient
+                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(eventDto);
+
+            // Act - Call GetMetadata multiple times; IndexNumber must be identical
+            var result1 = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
+            var result2 = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
+            var result3 = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
+
+            // Assert
+            Assert.Equal(result1.Item.IndexNumber, result2.Item.IndexNumber);
+            Assert.Equal(result2.Item.IndexNumber, result3.Item.IndexNumber);
+        }
+
+        [Fact]
+        public async Task DeriveIndexNumber_is_not_zero()
+        {
+            // IndexNumber should always be a positive number (1-based)
+            var testEvent = CreateTestEvent();
+            testEvent.Slug = "37c3-12746-opening_ceremony";
+            var eventDto = CreateEventDto(testEvent);
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
+            episodeInfo.ProviderIds["MediaCccDe"] = testEvent.Guid;
+
+            _mockApiClient
+                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(eventDto);
+
+            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
+            Assert.True(result.Item.IndexNumber > 0, "IndexNumber should be positive (1-based)");
+        }
+
+        #endregion
+
+        #region C5: DeriveParentIndexNumber works for non-December conferences
+
+        [Fact]
+        public async Task DeriveParentIndexNumber_works_for_july_conference()
+        {
+            // Arrange - MCH (MiniCamp Hamburg) takes place in July
+            var testEvent = CreateTestEvent();
+            testEvent.Date = "2024-07-05";
+            var eventDto = CreateEventDto(testEvent);
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
+            episodeInfo.ProviderIds["MediaCccDe"] = testEvent.Guid;
+
+            _mockApiClient
+                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(eventDto);
+
+            // Act
+            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
+
+            // Assert - ParentIndexNumber should be determined from the date,
+            // not hardcoded to December logic
+            Assert.NotNull(result.Item.ParentIndexNumber);
+            Assert.True(result.Item.ParentIndexNumber > 0,
+                "ParentIndexNumber should be positive for non-December conferences");
+        }
+
+        [Fact]
+        public async Task DeriveParentIndexNumber_works_for_march_conference()
+        {
+            // Arrange - GPN takes place in March
+            var testEvent = CreateTestEvent();
+            testEvent.Date = "2024-03-22";
+            var eventDto = CreateEventDto(testEvent);
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
+            episodeInfo.ProviderIds["MediaCccDe"] = testEvent.Guid;
+
+            _mockApiClient
+                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(eventDto);
+
+            // Act
+            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
+
+            // Assert
+            Assert.NotNull(result.Item.ParentIndexNumber);
+            Assert.True(result.Item.ParentIndexNumber > 0,
+                "ParentIndexNumber should be positive for March conferences");
+        }
+
+        [Fact]
+        public async Task DeriveParentIndexNumber_preserves_december_congress_day_number()
+        {
+            // Arrange - For CCC congresses starting Dec 27, day numbers should still work
+            var testEvent = CreateTestEvent();
+            testEvent.Date = "2023-12-27";
+            var eventDto = CreateEventDto(testEvent);
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
+            episodeInfo.ProviderIds["MediaCccDe"] = testEvent.Guid;
+
+            _mockApiClient
+                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(eventDto);
+
+            // Act
+            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
+
+            // Assert - Dec 27 should be Day 1 (ParentIndexNumber = 1)
+            Assert.Equal(1, result.Item.ParentIndexNumber);
+        }
+
+        [Fact]
+        public async Task DeriveParentIndexNumber_returns_null_for_null_date()
+        {
+            // Arrange
+            var testEvent = CreateTestEvent();
+            testEvent.Date = null;
+            var eventDto = CreateEventDto(testEvent);
+            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
+            episodeInfo.ProviderIds["MediaCccDe"] = testEvent.Guid;
+
+            _mockApiClient
+                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(eventDto);
+
+            // Act
+            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
+
+            // Assert
+            Assert.Null(result.Item.ParentIndexNumber);
+        }
+
+        #endregion
+
+        #region GetSearchResults tests
+
+        [Fact]
+        public async Task GetSearchResults_returns_result_when_provider_id_available()
+        {
+            // Arrange
+            var searchInfo = new EpisodeInfo { Name = "Opening Ceremony" };
+            searchInfo.ProviderIds["MediaCccDe"] = "real-guid-123";
+
+            // Act
+            var results = await _provider.GetSearchResults(searchInfo, CancellationToken.None);
+
+            // Assert
+            Assert.NotEmpty(results);
+            var resultList = results.ToList();
+            Assert.Single(resultList);
+            Assert.Equal("real-guid-123", resultList[0].ProviderIds["MediaCccDe"]);
+        }
+
+        [Fact]
+        public async Task GetSearchResults_returns_empty_when_no_provider_id()
+        {
+            // Arrange
+            var searchInfo = new EpisodeInfo { Name = "Opening Ceremony" };
+            // No ProviderIds set
+
+            // Act
+            var results = await _provider.GetSearchResults(searchInfo, CancellationToken.None);
+
+            // Assert
+            Assert.Empty(results);
+        }
+
+        #endregion
+
+        #region GetImageResponse tests
+
+        [Fact]
+        public async Task GetImageResponse_returns_404_not_found()
+        {
+            // Act
+            var response = await _provider.GetImageResponse("https://example.com/image.jpg", CancellationToken.None);
+
+            // Assert - Should return 404, not throw NotImplementedException
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         }
 
         #endregion

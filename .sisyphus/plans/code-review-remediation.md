@@ -63,7 +63,7 @@
   - Acceptance: Username `..` rejected, path validation tests pass, cross-platform path defaults
   - _Files_: `UserLibraryService.cs`, `UserLibraryServiceTests.cs`, `PluginConfiguration.cs`
 
-- [ ] **P2-3: Add authentication to MediaCccController read endpoints**
+- [x] **P2-3: Add authentication to MediaCccController read endpoints**
   - C8 (Browse `/conferences`, `/events`, `/events/recent` — no `[Authorize]`)
   - C8 (Server usable as open proxy to media.ccc.de API)
   - H12 (Inconsistent `elevation` policy vs `Admin` role in `SyncController`)

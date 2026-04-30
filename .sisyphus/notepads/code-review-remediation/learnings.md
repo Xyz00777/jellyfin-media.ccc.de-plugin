@@ -100,3 +100,29 @@
 ### Potential Gotchas
 - `[InternalsVisibleTo]` in csproj requires the test project assembly name to match exactly. The test project's assembly name is `MediaCccDe.Tests` (set via `AssemblyName` derived from project name `MediaCccDe.Tests`).
 - The `while (sanitized.Contains(".."))` loop is intentional: `Replace("..", "")` on `"..."` → `"."`, but a single pass on `"...` would leave `"."`. Repeated replacement handles edge cases like `"...."`.
+
+## P2-2: MediaCccEpisodeProvider Bug Fixes (C3-C5 + 3 more)
+
+### Bugs Fixed
+1. **C3 — GetMetadata used info.Name instead of ProviderIds**: `GetMetadata` used `info.Name` (talk title) as the lookup key for `GetEventAsync`. After initial identification, Jellyfin stores the event GUID in `ProviderIds["MediaCccDe"]` and passes BOTH `Name` and `ProviderIds` on refresh. Using `Name` caused metadata refresh to always fail for previously-identified episodes. Fixed: `info.ProviderIds.TryGetValue("MediaCccDe", out var existingId) ? existingId : info.Name`.
+
+2. **C4 — DeriveIndexNumber used non-deterministic string.GetHashCode()**: `string.GetHashCode()` is not deterministic across .NET process restarts (it uses a random per-process seed since .NET Core). This meant the same episode could get a different `IndexNumber` every server restart, breaking episode ordering. Fixed: replaced with SHA256 hash of the GUID, which is deterministic.
+
+3. **C5 — DeriveParentIndexNumber hard-coded Dec-27 convention**: `dayOfMonth >= 27 && dayOfMonth <= 31` assumed CCC congresses in December, but the plugin supports other conferences (MCH in July, GPN in March, etc.). The old code would assign `Math.Min(dayOfMonth, 10)` to any non-late-December event, which is wrong for July (7→7) but catastrophically wrong for conferences spanning multiple months. Fixed: CCC congress logic preserved for December 27+, all other months use `dayOfMonth` directly (day 1 of conference = season 1).
+
+4. **GetSearchResults was empty**: Returned `Enumerable.Empty<RemoteSearchResult>()`, breaking Jellyfin's "Identify" feature. Fixed: returns a `RemoteSearchResult` when `ProviderIds["MediaCccDe"]` is present.
+
+5. **GetImageResponse threw NotImplementedException**: Fixed: returns `HttpResponseMessage` with `HttpStatusCode.NotFound` (404).
+
+6. **Constructor depended on RecordingSelector (concrete) instead of IRecordingSelector (interface)**: DI registers `IRecordingSelector → RecordingSelector`, but the provider depended on the concrete type, preventing testing with mocks. Fixed: parameter changed to `IRecordingSelector`.
+
+### Key Decisions
+- **SHA256 for determinism**: Chose `SHA256.HashData` over simpler approaches (CRC32, FNV) because it's in `System.Security.Cryptography` (no NuGet needed), is guaranteed deterministic, and the cost is negligible for short GUID strings.
+- **DeriveParentIndexNumber December logic unchanged**: For December 27-31, the formula `eventDate.Day - 27 + 1` is preserved exactly. This gives Dec 27=1, Dec 28=2, Dec 29=3, Dec 30=4, Dec 31=5 — matching the CCC convention that "Day 1" is Dec 27.
+- **Non-December conferences use day-of-month**: This is a best-effort approach. Ideally we'd know the conference start date, but `GetMetadata` only sees a single event at a time, not the whole conference. The day-of-month approach works correctly for conferences that start on day 1 of a month.
+- **Test constructor updated from `RecordingSelector` to `Mock<IRecordingSelector>`**: This allows proper unit testing with mocked dependencies, matching DI patterns.
+
+### TDD Results
+- 11 new tests written (all failed RED initially due to constructor type mismatch)
+- Existing tests updated: changed `_recordingSelector` from `RecordingSelector` concrete to `Mock<IRecordingSelector>`
+- Total: 475 tests passing (464 existing + 11 new)
