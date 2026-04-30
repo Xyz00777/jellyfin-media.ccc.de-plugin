@@ -49,6 +49,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
                 var conferences = await _apiClient.GetConferencesAsync(cancellationToken).ConfigureAwait(false);
                 return Ok(conferences);
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to fetch conferences from API");
@@ -76,6 +80,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             {
                 _logger.LogWarning(ex, "Invalid conference ID: {ConferenceId}", conferenceId);
                 return BadRequest(new { error = ex.Message });
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -110,6 +118,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
                 }
                 return Ok(eventDto);
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to fetch event {Guid}", guid);
@@ -131,6 +143,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             {
                 var events = await _apiClient.GetRecentAsync(limit, cancellationToken).ConfigureAwait(false);
                 return Ok(events);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {

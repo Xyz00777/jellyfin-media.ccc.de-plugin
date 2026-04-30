@@ -147,9 +147,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
                 progress?.Report(0.0);
 
-                while ((bytesRead = await contentStream.ReadAsync(buffer, 0, BufferSize, cancellationToken).ConfigureAwait(false)) > 0)
+                while ((bytesRead = await contentStream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
                 {
-                    await fileStream.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
+                    await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
                     downloadedBytes += bytesRead;
 
                     if (totalBytes > 0 && progress != null)

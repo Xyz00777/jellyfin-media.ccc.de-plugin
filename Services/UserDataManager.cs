@@ -165,30 +165,39 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         public async Task PersistAsync(Guid userId)
         {
             string filePath;
-            string json;
+            UserData snapshot;
 
             lock (_lock)
             {
                 filePath = GetUserFilePath(userId);
-                var directory = Path.GetDirectoryName(filePath);
-                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
 
-                if (_cache.TryGetValue(userId, out var dataToSave))
-                {
-                    // Serialize a deep copy to avoid concurrent modification during async write
-                    json = JsonSerializer.Serialize(dataToSave, new JsonSerializerOptions
-                    {
-                        WriteIndented = true,
-                        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-                    });
-                }
-                else
+                if (!_cache.TryGetValue(userId, out var dataToSave))
                 {
                     return;
                 }
+
+                snapshot = new UserData
+                {
+                    UserId = dataToSave.UserId,
+                    Watchlist = new HashSet<string>(dataToSave.Watchlist),
+                    SearchProgress = new HashSet<string>(dataToSave.SearchProgress),
+                    PreferredAudioLanguages = new HashSet<string>(dataToSave.PreferredAudioLanguages),
+                    PreferredSubtitleLanguages = new HashSet<string>(dataToSave.PreferredSubtitleLanguages),
+                    CreatedAt = dataToSave.CreatedAt,
+                    UpdatedAt = dataToSave.UpdatedAt
+                };
+            }
+
+            var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            });
+
+            var directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
             }
 
             await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);

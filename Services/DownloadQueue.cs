@@ -207,17 +207,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private async Task PersistAsync()
         {
             string filePath;
-            string json;
+            List<DownloadQueueItem> snapshot;
             lock (_lock)
             {
                 filePath = GetFilePath();
-                var itemsToSave = _queue.Values.ToList();
-                json = JsonSerializer.Serialize(itemsToSave, new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-                });
+                snapshot = _queue.Values.ToList();
             }
+
+            var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            });
 
             var directory = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))

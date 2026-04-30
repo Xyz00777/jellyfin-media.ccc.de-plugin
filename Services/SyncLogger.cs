@@ -184,13 +184,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 lock (_lock)
                 {
                     filePath = GetFilePath();
-                    var directory = Path.GetDirectoryName(filePath);
-                    if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-                    {
-                        Directory.CreateDirectory(directory);
-                    }
-
                     snapshot = _history.ToList();
+                }
+
+                var directory = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
                 }
 
                 var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions

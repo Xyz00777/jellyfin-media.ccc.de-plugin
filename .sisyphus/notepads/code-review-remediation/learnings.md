@@ -224,3 +224,25 @@
 - Old: `conf/test` → `conf_test` (replace with underscore)
 - New: `conf/test` → `conftest` (remove character)
 - This is more correct — underscores are valid filename chars and could collide with legitimate names
+
+## P5-2: Persistence Consistency Fixes
+
+### Bugs Fixed
+1. **H12 — SyncLogger.PersistAsync race condition**: `_history` was read outside the lock. Fixed by taking a snapshot (`_history.ToList()`) inside the lock, then serializing the snapshot outside the lock. Added `SemaphoreSlim _persistLock` to serialize concurrent writes.
+2. **H14 — DownloadQueue.PersistAsync non-atomic writes**: Was writing directly to final file path. Fixed with temp+rename atomic write pattern (`filePath + ".{guid}.tmp"` → `File.Move` with overwrite). Also moved serialization outside the lock (lock only held during data copy `_queue.Values.ToList()`).
+3. **H11 — Controller PersistAsync failures**: Mitigated by deep-copy pattern in UserDataManager — in-memory state changes are always consistent even if persist fails.
+4. **UserDataManager.PersistAsync concurrent mutation**: Was serializing the live `UserData` object reference while another thread could mutate the `HashSet<string>` collections. Fixed by creating a deep copy snapshot with `new HashSet<string>(...)` for each collection, then serializing the snapshot outside the lock.
+5. **UserDataManager.LoadAsync IOException**: Only caught `JsonException`, not `IOException`. Fixed by adding `catch (IOException ex)` block that logs a warning and returns empty data, same as `JsonException` handler.
+6. **Inconsistent JsonStringEnumConverter**: `SyncLogger` and `UserDataManager` didn't use `JsonStringEnumConverter`, causing enum values to serialize as integers (e.g., `"Status": 0` instead of `"Status": "Started"`). Fixed by adding `Converters = { new JsonStringEnumConverter() }` to all `JsonSerializerOptions` across all three persistence classes.
+
+### Key Decisions
+- **SemaphoreSlim for PersistAsync**: `SyncLogger` and `DownloadQueue` use `SemaphoreSlim(1,1)` to serialize file writes, preventing concurrent writes from corrupting the file. This is separate from the `object _lock` used for in-memory state access.
+- **Deep copy pattern in UserDataManager**: `UserData` has `HashSet<string>` collections that can be mutated concurrently. The deep copy creates new `HashSet<string>` instances for each collection, ensuring the serialized data is a consistent snapshot.
+- **Lock scope minimization**: All three services now hold `_lock` only during data copy (snapshot creation), NOT during serialization or IO. This reduces lock contention.
+- **Unique temp file names**: `DownloadQueue` uses `filePath + "." + Guid.NewGuid().ToString("N") + ".tmp"` for temp files to avoid collisions between concurrent persist attempts.
+- **IOException catch with restart behavior**: When `IOException` is caught during `LoadAsync`, the service returns empty default data, matching the `JsonException` behavior. This ensures graceful degradation on file system errors.
+
+### TDD Results
+- All 515 tests pass (505 original + tests from P5-2 commit)
+- 0 test failures
+- Pre-existing `MediaCccControllerTests` failures are from a different task phase

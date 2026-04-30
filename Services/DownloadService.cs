@@ -12,7 +12,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
     /// <summary>
     /// Background service that processes download queue items.
     /// </summary>
-    public class DownloadService : IHostedService
+    public class DownloadService : IHostedService, IDisposable
     {
         private readonly IDownloadQueue _queue;
         private readonly IFileService _fileService;
@@ -22,6 +22,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private readonly SemaphoreSlim _concurrencyLimiter;
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
         private Task? _backgroundTask;
+        private bool _disposed;
 
         /// <summary>
         /// Initializes a new instance of DownloadService.
@@ -122,7 +123,17 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
                 var progress = new Progress<double>(p =>
                 {
-                    _ = _queue.UpdateProgressAsync(item.Id, p);
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await _queue.UpdateProgressAsync(item.Id, p).ConfigureAwait(false);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to report progress for download {Id}", item.Id);
+                        }
+                    });
                 });
 
                 await _fileService.DownloadFileAsync(
@@ -182,6 +193,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             }
 
             return Task.CompletedTask;
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                _cts.Dispose();
+                _disposed = true;
+            }
         }
     }
 }
