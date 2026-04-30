@@ -18,6 +18,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
     /// </summary>
     [ApiController]
     [Route("media_ccc")]
+    [Authorize]
     public class MediaCccController : ControllerBase
     {
         private readonly ILogger<MediaCccController> _logger;

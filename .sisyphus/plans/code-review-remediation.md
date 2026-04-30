@@ -49,14 +49,14 @@
 
 ## Phase 2 — Security Fixes (critical exploits)
 
-- [ ] **P2-1: URL & path validation in FileService**
+- [x] **P2-1: URL & path validation in FileService**
   - C6 (SSRF — no URL validation on downloads)
   - C6 (Path traversal — no `destinationPath` sanitization)
   - H13 (Non-atomic file persistence — temp file + rename pattern)
   - Acceptance: URL whitelist enforced (https://cdn.media.ccc.de only), `..` blocked, atomic writes
   - _Files_: `FileService.cs`, `FileServiceTests.cs`
 
-- [ ] **P2-2: Path traversal fix in UserLibraryService**
+- [x] **P2-2: Path traversal fix in UserLibraryService**
   - C7 (`SanitizeUsername` does not strip `..` → parent-directory writes)
   - H11 (Lock held during slow synchronous `AddVirtualFolder`)
   - H8 (Hardcoded Linux-only default `WatchlistPath` in `PluginConfiguration`)

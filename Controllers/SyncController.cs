@@ -20,18 +20,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         private readonly ILogger<SyncController> _logger;
         private readonly ISyncLogger _syncLogger;
         private readonly IMediaCccApiClient _apiClient;
-        private readonly PluginConfiguration _configuration;
 
         public SyncController(
             ILogger<SyncController> logger,
             ISyncLogger syncLogger,
-            IMediaCccApiClient apiClient,
-            PluginConfiguration configuration)
+            IMediaCccApiClient apiClient)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _syncLogger = syncLogger ?? throw new ArgumentNullException(nameof(syncLogger));
             _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
-            _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         }
 
         [HttpPost("trigger")]
@@ -40,11 +37,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(403)]
         public IActionResult TriggerSync()
         {
-            if (!IsAdmin())
-            {
-                return Forbid();
-            }
-
             _logger.LogInformation("Manual sync triggered by user");
             return Accepted();
         }
@@ -55,11 +47,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(403)]
         public IActionResult GetSyncStatus()
         {
-            if (!IsAdmin())
-            {
-                return Forbid();
-            }
-
             var history = _syncLogger.GetSyncHistory(null);
             return Ok(history);
         }
@@ -70,11 +57,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(403)]
         public IActionResult GetSyncHistory([FromQuery] string? conferenceAcronym = null)
         {
-            if (!IsAdmin())
-            {
-                return Forbid();
-            }
-
             var history = _syncLogger.GetSyncHistory(conferenceAcronym);
             return Ok(history);
         }
@@ -85,18 +67,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(403)]
         public IActionResult ClearSyncHistory()
         {
-            if (!IsAdmin())
-            {
-                return Forbid();
-            }
-
             _syncLogger.ClearHistory();
             return NoContent();
-        }
-
-        private bool IsAdmin()
-        {
-            return User.IsInRole("Admin");
         }
     }
 }

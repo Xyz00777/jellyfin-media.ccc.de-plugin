@@ -7,7 +7,6 @@ using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Controllers;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Services;
-using MediaBrowser.Model.Plugins;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -26,7 +25,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         private readonly Mock<IMediaCccApiClient> _apiClientMock;
         private readonly Mock<IUserDataManager> _userDataManagerMock;
         private readonly Mock<ISyncLogger> _syncLoggerMock;
-        private readonly PluginConfiguration _configuration;
         private readonly Mock<ILogger<MediaCccController>> _mediaCccLoggerMock;
         private readonly Mock<ILogger<SyncController>> _syncLoggerControllerMock;
 
@@ -35,7 +33,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             _apiClientMock = new Mock<IMediaCccApiClient>(MockBehavior.Strict);
             _userDataManagerMock = new Mock<IUserDataManager>(MockBehavior.Loose);
             _syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Strict);
-            _configuration = new PluginConfiguration();
             _mediaCccLoggerMock = new Mock<ILogger<MediaCccController>>(MockBehavior.Loose);
             _syncLoggerControllerMock = new Mock<ILogger<SyncController>>(MockBehavior.Loose);
         }
@@ -477,30 +474,31 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public void TriggerSync_Returns403_ForNonAdminUser()
+        public void TriggerSync_Returns202_ForAnyAuthenticatedUser()
         {
-            // Arrange
+            // Authorization is handled by [Authorize(Policy = "Elevation")] at class level,
+            // not by manual IsAdmin() checks inside the method.
             var userId = Guid.NewGuid();
             var controller = CreateSyncControllerWithUser(userId, isAdmin: false);
 
-            // Act
             var result = controller.TriggerSync();
 
-            // Assert
-            Assert.IsType<ForbidResult>(result);
+            Assert.IsType<AcceptedResult>(result);
         }
 
         [Fact]
-        public void GetSyncHistory_Returns401_WhenUserNotAuthenticated()
+        public void GetSyncHistory_ReturnsData_ForAnyAuthenticatedUser()
         {
-            // Arrange
+            // Authorization handled by class-level [Authorize(Policy = "Elevation")]
+            _syncLoggerMock
+                .Setup(x => x.GetSyncHistory(null))
+                .Returns(new List<SyncLogEntry>().AsReadOnly());
+
             var controller = CreateSyncControllerWithoutUser();
 
-            // Act
             var result = controller.GetSyncHistory();
 
-            // Assert - SyncController has class-level AuthAttribute, ForbidResult for unauthenticated
-            Assert.IsType<ForbidResult>(result);
+            Assert.IsType<OkObjectResult>(result);
         }
 
         #endregion
@@ -557,17 +555,19 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public void GetSyncStatus_Returns403_ForNonAdminUser()
+        public void GetSyncStatus_ReturnsOk_ForAnyAuthenticatedUser()
         {
-            // Arrange
+            // Authorization handled by class-level [Authorize(Policy = "Elevation")]
             var userId = Guid.NewGuid();
+            _syncLoggerMock
+                .Setup(x => x.GetSyncHistory(null))
+                .Returns(new List<SyncLogEntry>().AsReadOnly());
+
             var controller = CreateSyncControllerWithUser(userId, isAdmin: false);
 
-            // Act
             var result = controller.GetSyncStatus();
 
-            // Assert
-            Assert.IsType<ForbidResult>(result);
+            Assert.IsType<OkObjectResult>(result);
         }
 
         #endregion
@@ -645,35 +645,89 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public void GetSyncHistory_Returns403_ForNonAdminUser()
+        public void GetSyncHistory_ReturnsOk_ForAnyAuthenticatedUser()
         {
-            // Arrange
+            // Authorization handled by class-level [Authorize(Policy = "Elevation")]
             var userId = Guid.NewGuid();
+            _syncLoggerMock
+                .Setup(x => x.GetSyncHistory(null))
+                .Returns(new List<SyncLogEntry>().AsReadOnly());
+
             var controller = CreateSyncControllerWithUser(userId, isAdmin: false);
 
-            // Act
             var result = controller.GetSyncHistory();
 
-            // Assert
-            Assert.IsType<ForbidResult>(result);
+            Assert.IsType<OkObjectResult>(result);
         }
 
         [Fact]
-        public void TriggerSync_Returns401_WhenUserNotAuthenticated()
+        public void TriggerSync_Returns202_WithoutManualAuthCheck()
         {
-            // Arrange
+            // Authorization handled by class-level [Authorize(Policy = "Elevation")]
             var controller = CreateSyncControllerWithoutUser();
 
-            // Act
             var result = controller.TriggerSync();
 
-            // Assert - SyncController has class-level AuthorizeAttribute
-            Assert.IsType<ForbidResult>(result);
+            Assert.IsType<AcceptedResult>(result);
         }
 
         #endregion
 
         #region Authorization Attribute Tests
+
+        [Fact]
+        public void MediaCccController_HasAuthorizeAttribute()
+        {
+            var attr = typeof(MediaCccController)
+                .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true)
+                .FirstOrDefault();
+            // Prevent anonymous users from using Jellyfin as open proxy to media.ccc.de API
+            Assert.NotNull(attr);
+        }
+
+        [Fact]
+        public void GetConferences_requires_authentication()
+        {
+            var method = typeof(MediaCccController).GetMethod("GetConferences");
+            var authAttr = method?.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true).FirstOrDefault()
+                ?? typeof(MediaCccController).GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true).FirstOrDefault();
+            Assert.NotNull(authAttr);
+        }
+
+        [Fact]
+        public void GetConferenceEvents_requires_authentication()
+        {
+            var method = typeof(MediaCccController).GetMethod("GetConferenceEvents");
+            var authAttr = method?.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true).FirstOrDefault()
+                ?? typeof(MediaCccController).GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true).FirstOrDefault();
+            Assert.NotNull(authAttr);
+        }
+
+        [Fact]
+        public void GetEvent_requires_authentication()
+        {
+            var method = typeof(MediaCccController).GetMethod("GetEvent");
+            var authAttr = method?.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true).FirstOrDefault()
+                ?? typeof(MediaCccController).GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true).FirstOrDefault();
+            Assert.NotNull(authAttr);
+        }
+
+        [Fact]
+        public void GetRecentEvents_requires_authentication()
+        {
+            var method = typeof(MediaCccController).GetMethod("GetRecentEvents");
+            var authAttr = method?.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true).FirstOrDefault()
+                ?? typeof(MediaCccController).GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true).FirstOrDefault();
+            Assert.NotNull(authAttr);
+        }
+
+        [Fact]
+        public void SyncController_DoesNotHaveRedundantIsAdminMethod()
+        {
+            var method = typeof(SyncController).GetMethod("IsAdmin",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.Null(method);
+        }
 
         [Fact]
         public void MediaCccController_HasRouteAttribute()
@@ -758,8 +812,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var controller = new SyncController(
                 _syncLoggerControllerMock.Object,
                 _syncLoggerMock.Object,
-                _apiClientMock.Object,
-                _configuration);
+                _apiClientMock.Object);
 
             controller.ControllerContext = new ControllerContext
             {
