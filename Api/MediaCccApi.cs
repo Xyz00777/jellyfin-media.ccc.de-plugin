@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -24,27 +23,24 @@ namespace Jellyfin.Plugin.MediaCccDe.Api
 
     public class MediaCccApi : IMediaCccApiClient
     {
-        private readonly HttpClient _httpClient;
+        private readonly IHttpClientFactory _httpClientFactory;
         private const string BaseUrl = "https://api.media.ccc.de/public/";
+        private const string HttpClientName = "MediaCccApi";
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             PropertyNameCaseInsensitive = true,
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
         };
 
-        public MediaCccApi(HttpClient httpClient)
+        public MediaCccApi(IHttpClientFactory httpClientFactory)
         {
-            _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-            _httpClient.BaseAddress = new Uri(BaseUrl);
-            _httpClient.Timeout = TimeSpan.FromSeconds(30);
-            _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
         }
-
-        public HttpClient GetHttpClient() => _httpClient;
 
         public async Task<T?> GetAsync<T>(string endpoint, CancellationToken cancellationToken = default)
         {
-            var response = await _httpClient.GetAsync(endpoint, cancellationToken).ConfigureAwait(false);
+            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+            var response = await httpClient.GetAsync(endpoint, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
             var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
@@ -53,7 +49,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Api
 
         public async Task<IReadOnlyList<ConferenceDto>> GetConferencesAsync(CancellationToken cancellationToken = default)
         {
-            var result = await GetAsync<List<ConferenceDto>>("conferences", cancellationToken).ConfigureAwait(false);
+            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+            var result = await GetAsyncInternal<List<ConferenceDto>>(httpClient, "conferences", cancellationToken).ConfigureAwait(false);
             return result ?? new List<ConferenceDto>();
         }
 
@@ -64,7 +61,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Api
                 throw new ArgumentException("Conference ID must be a positive integer", nameof(conferenceId));
             }
 
-            var result = await GetAsync<EventDto[]>($"conferences/{conferenceId}/events", cancellationToken).ConfigureAwait(false);
+            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+            var result = await GetAsyncInternal<EventDto[]>(httpClient, $"conferences/{conferenceId}/events", cancellationToken).ConfigureAwait(false);
             return result ?? Array.Empty<EventDto>();
         }
 
@@ -75,13 +73,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Api
                 throw new ArgumentException("GUID cannot be null or empty", nameof(guid));
             }
 
-            return await GetAsync<EventDto>($"events/{guid}", cancellationToken).ConfigureAwait(false);
+            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+            return await GetAsyncInternal<EventDto>(httpClient, $"events/{guid}", cancellationToken).ConfigureAwait(false);
         }
 
         public async Task<EventDto[]> GetRecentAsync(int? limit = null, CancellationToken cancellationToken = default)
         {
             var endpoint = limit.HasValue ? $"events/recent?limit={limit.Value}" : "events/recent";
-            var result = await GetAsync<EventDto[]>(endpoint, cancellationToken).ConfigureAwait(false);
+            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+            var result = await GetAsyncInternal<EventDto[]>(httpClient, endpoint, cancellationToken).ConfigureAwait(false);
             
             if (result == null || result.Length == 0)
             {
@@ -98,6 +98,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Api
             }
 
             return sorted;
+        }
+
+        private async Task<T?> GetAsyncInternal<T>(HttpClient httpClient, string endpoint, CancellationToken cancellationToken)
+        {
+            var response = await httpClient.GetAsync(endpoint, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            return await JsonSerializer.DeserializeAsync<T>(stream, JsonOptions, cancellationToken).ConfigureAwait(false);
         }
 
         public string BuildUrl(string endpoint)

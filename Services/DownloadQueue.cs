@@ -17,16 +17,35 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private readonly ILogger<DownloadQueue> _logger;
         private readonly object _lock = new object();
         private readonly Dictionary<Guid, DownloadQueueItem> _queue = new Dictionary<Guid, DownloadQueueItem>();
+        private volatile bool _initialized;
+        private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
 
         public DownloadQueue(IApplicationPaths applicationPaths, ILogger<DownloadQueue> logger)
         {
             _applicationPaths = applicationPaths;
             _logger = logger;
-            LoadAsync().GetAwaiter().GetResult();
+        }
+
+        private async Task EnsureInitializedAsync()
+        {
+            if (_initialized) return;
+
+            await _initLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (_initialized) return;
+                await LoadAsync().ConfigureAwait(false);
+                _initialized = true;
+            }
+            finally
+            {
+                _initLock.Release();
+            }
         }
 
         public async Task EnqueueAsync(DownloadQueueItem item)
         {
+            await EnsureInitializedAsync().ConfigureAwait(false);
             lock (_lock)
             {
                 var existingItem = _queue.Values.FirstOrDefault(i =>
@@ -55,6 +74,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
         public async Task<DownloadQueueItem?> DequeueAsync()
         {
+            await EnsureInitializedAsync().ConfigureAwait(false);
             DownloadQueueItem? nextItem;
             lock (_lock)
             {
@@ -77,25 +97,31 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             return nextItem;
         }
 
-        public Task<DownloadQueueItem?> GetItemAsync(Guid id)
+        public async Task<DownloadQueueItem?> GetItemAsync(Guid id)
         {
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            DownloadQueueItem? item;
             lock (_lock)
             {
-                _queue.TryGetValue(id, out var item);
-                return Task.FromResult(item);
+                _queue.TryGetValue(id, out item);
             }
+            return item;
         }
 
-        public Task<IEnumerable<DownloadQueueItem>> GetUserQueueAsync(Guid userId)
+        public async Task<IEnumerable<DownloadQueueItem>> GetUserQueueAsync(Guid userId)
         {
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            List<DownloadQueueItem> items;
             lock (_lock)
             {
-                return Task.FromResult(_queue.Values.Where(i => i.UserId == userId).ToList().AsEnumerable());
+                items = _queue.Values.Where(i => i.UserId == userId).ToList();
             }
+            return items;
         }
 
         public async Task MarkInProgressAsync(Guid id)
         {
+            await EnsureInitializedAsync().ConfigureAwait(false);
             lock (_lock)
             {
                 if (_queue.TryGetValue(id, out var item))
@@ -110,6 +136,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
         public async Task MarkCompletedAsync(Guid id)
         {
+            await EnsureInitializedAsync().ConfigureAwait(false);
             lock (_lock)
             {
                 if (_queue.TryGetValue(id, out var item))
@@ -124,6 +151,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
         public async Task MarkFailedAsync(Guid id, string errorMessage)
         {
+            await EnsureInitializedAsync().ConfigureAwait(false);
             lock (_lock)
             {
                 if (_queue.TryGetValue(id, out var item))
@@ -139,6 +167,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
         public async Task UpdateProgressAsync(Guid id, double progress)
         {
+            await EnsureInitializedAsync().ConfigureAwait(false);
             lock (_lock)
             {
                 if (_queue.TryGetValue(id, out var item))
@@ -151,16 +180,20 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             await PersistAsync().ConfigureAwait(false);
         }
 
-        public Task<int> GetQueueLengthAsync()
+        public async Task<int> GetQueueLengthAsync()
         {
+            await EnsureInitializedAsync().ConfigureAwait(false);
+            int count;
             lock (_lock)
             {
-                return Task.FromResult(_queue.Values.Count(i => i.Status == DownloadStatus.Pending));
+                count = _queue.Values.Count(i => i.Status == DownloadStatus.Pending);
             }
+            return count;
         }
 
         public async Task RemoveAsync(Guid id)
         {
+            await EnsureInitializedAsync().ConfigureAwait(false);
             lock (_lock)
             {
                 _queue.Remove(id);

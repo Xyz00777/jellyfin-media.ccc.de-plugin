@@ -16,43 +16,36 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
     public class MediaCccApiTests
     {
         private const string BaseUrl = "https://api.media.ccc.de/public/";
-        private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
 
         #region Constructor Tests
 
         [Fact]
-        public void Constructor_sets_base_address()
+        public void Constructor_creates_client_from_factory()
         {
-            var httpClient = new HttpClient();
-            var apiClient = CreateApiClient(httpClient);
+            var mockFactory = new Mock<IHttpClientFactory>(MockBehavior.Strict);
+            var handlerMock = new Mock<HttpMessageHandler>();
+            handlerMock.Protected()
+                .Setup<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>())
+                .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("{}")
+                });
 
-            Assert.Equal(new Uri(BaseUrl), httpClient.BaseAddress);
-        }
+            var httpClient = new HttpClient(handlerMock.Object) { BaseAddress = new Uri(BaseUrl) };
+            mockFactory.Setup(x => x.CreateClient("MediaCccApi")).Returns(httpClient);
 
-        [Fact]
-        public void Constructor_sets_timeout()
-        {
-            var httpClient = new HttpClient();
-            var apiClient = CreateApiClient(httpClient);
-
-            Assert.Equal(DefaultTimeout, httpClient.Timeout);
-        }
-
-        [Fact]
-        public void Constructor_injects_HttpClient()
-        {
-            var httpClient = new HttpClient();
-            var apiClient = CreateApiClient(httpClient);
+            var apiClient = new MediaCccApi(mockFactory.Object);
 
             Assert.NotNull(apiClient);
-            // Verify the client is properly stored and used
-            Assert.Same(httpClient, GetInnerHttpClient(apiClient));
         }
 
         [Fact]
-        public void Constructor_throws_on_null_HttpClient()
+        public void Constructor_throws_on_null_HttpClientFactory()
         {
-            Assert.Throws<ArgumentNullException>(() => CreateApiClient(null!));
+            Assert.Throws<ArgumentNullException>(() => new MediaCccApi(null!));
         }
 
         #endregion
@@ -163,7 +156,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public async Task GetAsync_sets_correct_accept_header()
+        public async Task GetAsync_uses_client_configured_with_accept_header()
         {
             // Arrange
             HttpRequestMessage? capturedRequest = null;
@@ -180,6 +173,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 });
 
             var httpClient = new HttpClient(handlerMock.Object);
+            httpClient.DefaultRequestHeaders.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
             var apiClient = CreateApiClient(httpClient);
 
             // Act
@@ -342,13 +336,29 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
         private static IMediaCccApiClient CreateApiClient(HttpClient httpClient)
         {
-            return new MediaCccApi(httpClient);
+            if (httpClient.BaseAddress == null)
+            {
+                httpClient.BaseAddress = new Uri(BaseUrl);
+            }
+
+            var mockFactory = new Mock<IHttpClientFactory>(MockBehavior.Strict);
+            mockFactory
+                .Setup(x => x.CreateClient("MediaCccApi"))
+                .Returns(httpClient);
+            return new MediaCccApi(mockFactory.Object);
         }
 
-        private static HttpClient GetInnerHttpClient(IMediaCccApiClient apiClient)
+        private static IMediaCccApiClient CreateApiClient(Mock<HttpMessageHandler> handlerMock)
         {
-            return ((MediaCccApi)apiClient).GetHttpClient();
+            var httpClient = new HttpClient(handlerMock.Object) { BaseAddress = new Uri(BaseUrl) };
+            var mockFactory = new Mock<IHttpClientFactory>(MockBehavior.Strict);
+            mockFactory
+                .Setup(x => x.CreateClient("MediaCccApi"))
+                .Returns(httpClient);
+            return new MediaCccApi(mockFactory.Object);
         }
+
+
 
         private static Mock<HttpMessageHandler> CreateHttpMessageHandlerMock(string content, HttpStatusCode statusCode)
         {

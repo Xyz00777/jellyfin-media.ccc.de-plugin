@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Services;
+using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,15 +17,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void ServiceRegistrator_registers_MediaCccApi_as_singleton()
         {
-            // Arrange
             var serviceCollection = new ServiceCollection();
             var applicationHostMock = new Mock<IServerApplicationHost>();
             var registrator = new ServiceRegistrator();
-            
-            // Act
+
             registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
-            
-            // Assert
+
             var descriptor = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(IMediaCccApiClient));
             Assert.NotNull(descriptor);
             Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
@@ -33,17 +31,14 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void ServiceRegistrator_registers_SyncService_as_HostedService()
         {
-            // Arrange
             var serviceCollection = new ServiceCollection();
             var applicationHostMock = new Mock<IServerApplicationHost>();
             var registrator = new ServiceRegistrator();
-            
-            // Act
+
             registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
-            
-            // Assert
-            var descriptor = serviceCollection.FirstOrDefault(s => 
-                s.ServiceType == typeof(IHostedService) && 
+
+            var descriptor = serviceCollection.FirstOrDefault(s =>
+                s.ServiceType == typeof(IHostedService) &&
                 s.ImplementationType == typeof(SyncService));
             Assert.NotNull(descriptor);
         }
@@ -51,17 +46,14 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void ServiceRegistrator_registers_DownloadService_as_HostedService()
         {
-            // Arrange
             var serviceCollection = new ServiceCollection();
             var applicationHostMock = new Mock<IServerApplicationHost>();
             var registrator = new ServiceRegistrator();
-            
-            // Act
+
             registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
-            
-            // Assert
-            var descriptor = serviceCollection.FirstOrDefault(s => 
-                s.ServiceType == typeof(IHostedService) && 
+
+            var descriptor = serviceCollection.FirstOrDefault(s =>
+                s.ServiceType == typeof(IHostedService) &&
                 s.ImplementationType == typeof(DownloadService));
             Assert.NotNull(descriptor);
         }
@@ -69,15 +61,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void ServiceRegistrator_registers_UserDataManager_as_singleton()
         {
-            // Arrange
             var serviceCollection = new ServiceCollection();
             var applicationHostMock = new Mock<IServerApplicationHost>();
             var registrator = new ServiceRegistrator();
-            
-            // Act
+
             registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
-            
-            // Assert
+
             var descriptor = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(IUserDataManager));
             Assert.NotNull(descriptor);
             Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
@@ -86,39 +75,80 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void ServiceRegistrator_registers_LibrarySetupService_as_HostedService()
         {
-            // Arrange
             var serviceCollection = new ServiceCollection();
             var applicationHostMock = new Mock<IServerApplicationHost>();
             var registrator = new ServiceRegistrator();
-            
-            // Act
+
             registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
-            
-            // Assert
-            var descriptor = serviceCollection.FirstOrDefault(s => 
-                s.ServiceType == typeof(IHostedService) && 
+
+            var descriptor = serviceCollection.FirstOrDefault(s =>
+                s.ServiceType == typeof(IHostedService) &&
                 s.ImplementationType == typeof(LibrarySetupService));
             Assert.NotNull(descriptor);
         }
 
         [Fact]
-        public void HttpClient_registered_with_base_address()
+        public void ServiceRegistrator_registers_HttpClient_with_named_client()
         {
-            // Arrange
             var serviceCollection = new ServiceCollection();
             var applicationHostMock = new Mock<IServerApplicationHost>();
             var registrator = new ServiceRegistrator();
-            
-            // Act
+
             registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
-            
-            // Assert
-            var descriptor = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(System.Net.Http.HttpClient));
-            Assert.NotNull(descriptor);
-            
-            var httpClientFactoryDescriptor = serviceCollection.FirstOrDefault(s => 
+
+            var httpClientFactoryDescriptor = serviceCollection.FirstOrDefault(s =>
                 s.ServiceType.Name.Contains("IHttpClientFactory"));
             Assert.NotNull(httpClientFactoryDescriptor);
+        }
+
+        [Fact]
+        public void ServiceRegistrator_registers_IStrmGenerator_with_factory()
+        {
+            var serviceCollection = new ServiceCollection();
+            var applicationHostMock = new Mock<IServerApplicationHost>();
+            var registrator = new ServiceRegistrator();
+
+            registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
+
+            var descriptor = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(IStrmGenerator));
+            Assert.NotNull(descriptor);
+            Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
+            Assert.Null(descriptor.ImplementationType);
+            Assert.NotNull(descriptor.ImplementationFactory);
+        }
+
+        [Fact]
+        public void ServiceRegistrator_registers_IStrmFileGenerator()
+        {
+            var serviceCollection = new ServiceCollection();
+            var applicationHostMock = new Mock<IServerApplicationHost>();
+            var registrator = new ServiceRegistrator();
+
+            registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
+
+            var descriptor = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(IStrmFileGenerator));
+            Assert.NotNull(descriptor);
+            Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
+        }
+
+        [Fact]
+        public void ServiceRegistrator_StrmGenerator_factory_resolves_archivePath_from_IApplicationPaths()
+        {
+            var serviceCollection = new ServiceCollection();
+            var applicationHostMock = new Mock<IServerApplicationHost>();
+            var appPathsMock = new Mock<IApplicationPaths>();
+            appPathsMock.Setup(x => x.PluginConfigurationsPath).Returns("/test/config");
+            var registrator = new ServiceRegistrator();
+
+            registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
+            serviceCollection.AddSingleton(appPathsMock.Object);
+            serviceCollection.AddLogging();
+
+            var provider = serviceCollection.BuildServiceProvider();
+            var strmGenerator = provider.GetService<IStrmGenerator>();
+
+            Assert.NotNull(strmGenerator);
+            Assert.IsType<StrmGenerator>(strmGenerator);
         }
     }
 }

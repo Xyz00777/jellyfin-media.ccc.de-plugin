@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Net.Http;
 using System.Threading;
@@ -11,13 +12,19 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<FileService> _logger;
-        private const int BufferSize = 8192;
-        private readonly SemaphoreSlim _fileLock = new SemaphoreSlim(1, 1);
+        private const int BufferSize = 65536;
+        private const string HttpClientName = "MediaCccApi";
+        private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new(StringComparer.OrdinalIgnoreCase);
 
         public FileService(IHttpClientFactory httpClientFactory, ILogger<FileService> logger)
         {
             _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        private SemaphoreSlim GetFileLock(string destinationPath)
+        {
+            return _fileLocks.GetOrAdd(destinationPath, _ => new SemaphoreSlim(1, 1));
         }
 
         public async Task<string> DownloadFileAsync(string url, string destinationPath, IProgress<double>? progress, CancellationToken cancellationToken)
@@ -39,56 +46,53 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 EnsureDirectoryExists(directory);
             }
 
-            var httpClient = _httpClientFactory.CreateClient();
+            var fileLock = GetFileLock(destinationPath);
 
-            await _fileLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await fileLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                using (var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
+                var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+                var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
                 {
-                    if (!response.IsSuccessStatusCode)
+                    throw new HttpRequestException($"HTTP request failed with status code {response.StatusCode}");
+                }
+
+                var totalBytes = response.Content.Headers.ContentLength ?? -1;
+                var downloadedBytes = 0L;
+                var lastReportedProgress = 0.0;
+
+                await using var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize, FileOptions.Asynchronous);
+                await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                var buffer = new byte[BufferSize];
+                int bytesRead;
+
+                progress?.Report(0.0);
+
+                while ((bytesRead = await contentStream.ReadAsync(buffer, 0, BufferSize, cancellationToken).ConfigureAwait(false)) > 0)
+                {
+                    await fileStream.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
+                    downloadedBytes += bytesRead;
+
+                    if (totalBytes > 0 && progress != null)
                     {
-                        throw new HttpRequestException($"HTTP request failed with status code {response.StatusCode}");
-                    }
-
-                    var totalBytes = response.Content.Headers.ContentLength ?? -1;
-                    var downloadedBytes = 0L;
-                    var lastReportedProgress = 0.0;
-
-                    using (var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize, FileOptions.Asynchronous))
-                    using (var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false))
-                    {
-                        var buffer = new byte[BufferSize];
-                        int bytesRead;
-
-                        progress?.Report(0.0);
-
-                        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, BufferSize, cancellationToken).ConfigureAwait(false)) > 0)
+                        var currentProgress = (double)downloadedBytes / totalBytes;
+                        if (currentProgress - lastReportedProgress >= 0.01 || downloadedBytes == totalBytes)
                         {
-                            await fileStream.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
-                            downloadedBytes += bytesRead;
-
-                            if (totalBytes > 0 && progress != null)
-                            {
-                                var currentProgress = (double)downloadedBytes / totalBytes;
-                                if (currentProgress - lastReportedProgress >= 0.01 || downloadedBytes == totalBytes)
-                                {
-                                    progress.Report(currentProgress);
-                                    lastReportedProgress = currentProgress;
-                                }
-                            }
-                        }
-
-                        if (progress != null && totalBytes <= 0)
-                        {
-                            progress.Report(1.0);
+                            progress.Report(currentProgress);
+                            lastReportedProgress = currentProgress;
                         }
                     }
+                }
+
+                if (progress != null && totalBytes <= 0)
+                {
+                    progress.Report(1.0);
                 }
             }
             finally
             {
-                _fileLock.Release();
+                fileLock.Release();
             }
 
             return destinationPath;
@@ -101,18 +105,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 throw new ArgumentException("URL cannot be null or empty", nameof(url));
             }
 
-            var httpClient = _httpClientFactory.CreateClient();
-
-            using (var request = new HttpRequestMessage(HttpMethod.Head, url))
-            using (var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
+            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+            var request = new HttpRequestMessage(HttpMethod.Head, url);
+            var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
             {
-                if (!response.IsSuccessStatusCode)
-                {
-                    throw new HttpRequestException($"HTTP request failed with status code {response.StatusCode}");
-                }
-
-                return response.Content.Headers.ContentLength ?? -1;
+                throw new HttpRequestException($"HTTP request failed with status code {response.StatusCode}");
             }
+
+            return response.Content.Headers.ContentLength ?? -1;
         }
 
         public void DeleteFile(string filePath)
