@@ -132,7 +132,7 @@
   - Acceptance: All persist operations are atomic and crash-safe; consistent serialization options
   - _Files_: `SyncLogger.cs`, `DownloadQueue.cs`, `UserDataManager.cs`, `MediaCccController.cs`
 
-- [ ] **P5-3: Fix async/await anti-patterns**
+- [x] **P5-3: Fix async/await anti-patterns**
   - Fire-and-forget progress update in `DownloadService` (silent exception swallowing)
   - `DownloadService` CancellationTokenSource never disposed
   - `MediaCccController` generic `catch (Exception)` swallows `OperationCanceledException`

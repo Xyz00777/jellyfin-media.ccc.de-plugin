@@ -169,14 +169,26 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                         break;
                     }
 
-                    if (!_strmGenerator.StrmFilesExistForConference(conference))
+                    try
                     {
-                        await _strmGenerator.CreateStrmFilesForConference(conference, cancellationToken).ConfigureAwait(false);
-                        createdCount++;
-                        _logger.LogInformation("Created strm files for conference: {Conference}", conference.Title);
-                    }
+                        if (!_strmGenerator.StrmFilesExistForConference(conference))
+                        {
+                            await _strmGenerator.CreateStrmFilesForConference(conference, cancellationToken).ConfigureAwait(false);
+                            createdCount++;
+                            _logger.LogInformation("Created strm files for conference: {Conference}", conference.Title);
+                        }
 
-                    processedCount++;
+                        processedCount++;
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to process conference {Acronym}", conference.Acronym);
+                        processedCount++;
+                    }
                 }
 
                 _logger.LogInformation("Conference sync completed. Processed: {Processed}, Created: {Created}", processedCount, createdCount);

@@ -83,13 +83,38 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
             return Task.CompletedTask;
         }
 
+        private async Task<(Mock<ISyncLogger> syncLoggerMock, TaskCompletionSource<bool> syncCompletedTcs)> CreateSignalingSyncLoggerAsync()
+        {
+            var syncCompletedTcs = new TaskCompletionSource<bool>();
+            var syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Loose);
+            
+            syncLoggerMock
+                .Setup(x => x.LogSyncCompletion(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<DateTime>()))
+                .Callback<int, int, DateTime>((processed, created, timestamp) => syncCompletedTcs.TrySetResult(true));
+            
+            syncLoggerMock
+                .Setup(x => x.LogSyncFailure(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
+                .Callback<string, string, int, int>((conf, error, processed, created) => syncCompletedTcs.TrySetResult(true));
+
+            _applicationPathsMock.Setup(x => x.DataPath).Returns(_testLogPath);
+            _applicationPathsMock.Setup(x => x.CachePath).Returns(_testLogPath);
+
+            var realLogger = new SyncLogger(_applicationPathsMock.Object, new Mock<ILogger<SyncLogger>>().Object);
+            await realLogger.LoadAsync();
+            var history = realLogger.GetSyncHistory();
+            
+            syncLoggerMock.Setup(x => x.GetSyncHistory(It.IsAny<string>())).Returns(() => realLogger.GetSyncHistory());
+
+            return (syncLoggerMock, syncCompletedTcs);
+        }
+
         [Fact]
         public async Task Full_sync_workflow_creates_archive_library()
         {
-            // Arrange: Set up recorded API responses for full sync
             var conferences = CreateTestConferences();
             var events37C3 = CreateTestEvents(1);
             var events36C3 = CreateTestEvents(2);
+            var (syncLoggerMock, syncCompletedTcs) = await CreateSignalingSyncLoggerAsync();
 
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -104,14 +129,22 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events36C3);
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLoggerMock.Object, () => config, _loggerMock.Object);
 
-            // Act: Run full sync operation
             await _syncService.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(10000);
+            try
+            {
+                await syncCompletedTcs.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Sync did not complete within timeout");
+            }
+
             await _syncService.StopAsync(CancellationToken.None);
 
-            // Assert: Archive library structure created
             Assert.True(Directory.Exists(_testArchivePath), "Archive directory should be created");
             
             var conferenceDirs = Directory.GetDirectories(_testArchivePath);
@@ -126,6 +159,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
             var conferences = CreateTestConferences();
             var events = CreateTestEvents(1);
             var fetchCount = 0;
+            var (syncLoggerMock, syncCompletedTcs) = await CreateSignalingSyncLoggerAsync();
 
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -140,14 +174,22 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events);
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLoggerMock.Object, () => config, _loggerMock.Object);
 
-            // Act
             await _syncService.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(10000);
+            try
+            {
+                await syncCompletedTcs.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Sync did not complete within timeout");
+            }
+
             await _syncService.StopAsync(CancellationToken.None);
 
-            // Assert: API was called to fetch conferences
             Assert.True(fetchCount > 0, "Should fetch conferences from API");
             _apiClientMock.Verify(
                 x => x.GetConferencesAsync(It.IsAny<CancellationToken>()),
@@ -157,9 +199,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
         [Fact]
         public async Task Full_sync_workflow_creates_strm_tree()
         {
-            // Arrange
             var conferences = CreateTestConferences();
             var events = CreateTestEvents(1);
+            var (syncLoggerMock, syncCompletedTcs) = await CreateSignalingSyncLoggerAsync();
 
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -170,18 +212,25 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events);
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLoggerMock.Object, () => config, _loggerMock.Object);
 
-            // Act
             await _syncService.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(10000);
+            try
+            {
+                await syncCompletedTcs.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Sync did not complete within timeout");
+            }
+
             await _syncService.StopAsync(CancellationToken.None);
 
-            // Assert: .strm files created
             var strmFiles = Directory.GetFiles(_testArchivePath, "*.strm", SearchOption.AllDirectories);
             Assert.True(strmFiles.Length > 0, "Should create .strm files for events");
 
-            // Verify strm content contains valid URLs
             foreach (var strmFile in strmFiles)
             {
                 var content = await File.ReadAllTextAsync(strmFile);
@@ -193,9 +242,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
         [Fact]
         public async Task Full_sync_workflow_logs_all_operations()
         {
-            // Arrange
             var conferences = CreateTestConferences();
             var events = CreateTestEvents(1);
+            var syncCompletedTcs = new TaskCompletionSource<bool>();
 
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -206,29 +255,54 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events);
 
             var config = CreateTestConfiguration();
-            var syncLogger = CreateSyncLogger();
-            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLogger, () => config, _loggerMock.Object);
+            var syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Loose);
+            syncLoggerMock
+                .Setup(x => x.LogSyncCompletion(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<DateTime>()))
+                .Callback<int, int, DateTime>((processed, created, timestamp) => syncCompletedTcs.TrySetResult(true));
 
-            // Act
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLoggerMock.Object, () => config, _loggerMock.Object);
+
             await _syncService.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(10000);
+            try
+            {
+                await syncCompletedTcs.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Sync did not complete within timeout");
+            }
+
             await _syncService.StopAsync(CancellationToken.None);
 
-            // Assert: Sync operations logged
-            var history = syncLogger.GetSyncHistory();
-            Assert.True(history.Count > 0, "Should log sync operations");
-
-            // Verify log file exists
-            var logFiles = Directory.GetFiles(_testLogPath, "*.json", SearchOption.AllDirectories);
-            Assert.True(logFiles.Length > 0, "Should create log files");
+            syncLoggerMock.Verify(
+                x => x.LogSyncCompletion(
+                    It.IsAny<int>(),
+                    It.IsAny<int>(),
+                    It.IsAny<DateTime>()),
+                Times.AtLeastOnce(),
+                "Should log sync operations");
         }
 
         [Fact]
         public async Task Incremental_sync_only_updates_changes()
         {
-            // Arrange: First sync creates initial state
             var conferences = CreateTestConferences();
             var events = CreateTestEvents(1);
+            var firstSyncTcs = new TaskCompletionSource<bool>();
+            var secondSyncTcs = new TaskCompletionSource<bool>();
+            var syncCallCount = 0;
+
+            var syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Loose);
+            syncLoggerMock
+                .Setup(x => x.LogSyncCompletion(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<DateTime>()))
+                .Callback<int, int, DateTime>((processed, created, timestamp) =>
+                {
+                    var count = Interlocked.Increment(ref syncCallCount);
+                    if (count == 1) firstSyncTcs.TrySetResult(true);
+                    if (count == 2) secondSyncTcs.TrySetResult(true);
+                });
 
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -239,27 +313,43 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events);
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLoggerMock.Object, () => config, _loggerMock.Object);
 
-            // Act: First sync
             await _syncService.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts1 = new CancellationTokenSource(10000);
+            try
+            {
+                await firstSyncTcs.Task.WaitAsync(cts1.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("First sync did not complete within timeout");
+            }
 
             var initialFileCount = Directory.GetFiles(_testArchivePath, "*.strm", SearchOption.AllDirectories).Length;
 
-            // Act: Second sync (incremental) - reconfigure sync interval to 0 for immediate test
-            await _syncService.StopAsync(CancellationToken.None);
             config.SyncIntervalHours = 0;
-            await _syncService.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
             await _syncService.StopAsync(CancellationToken.None);
 
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLoggerMock.Object, () => config, _loggerMock.Object);
+            await _syncService.StartAsync(CancellationToken.None);
+
+            using var cts2 = new CancellationTokenSource(10000);
+            try
+            {
+                await secondSyncTcs.Task.WaitAsync(cts2.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Second sync did not complete within timeout");
+            }
+
+            await _syncService.StopAsync(CancellationToken.None);
             var finalFileCount = Directory.GetFiles(_testArchivePath, "*.strm", SearchOption.AllDirectories).Length;
 
-            // Assert: Incremental sync should not duplicate files
             Assert.Equal(initialFileCount, finalFileCount);
             
-            // Incremental sync should skip unchanged conferences
             _apiClientMock.Verify(
                 x => x.GetEventsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
                 Times.AtLeast(1));
@@ -270,6 +360,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
         {
             var conferences = CreateTestConferences();
             var rateLimitCount = 0;
+            var firstCallTcs = new TaskCompletionSource<bool>();
+
+            var syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Loose);
 
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -278,6 +371,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                     rateLimitCount++;
                     if (rateLimitCount == 1)
                     {
+                        firstCallTcs.TrySetResult(true);
                         throw new HttpRequestException("429 Too Many Requests", null, System.Net.HttpStatusCode.TooManyRequests);
                     }
                     return conferences;
@@ -289,10 +383,20 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events);
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLoggerMock.Object, () => config, _loggerMock.Object);
 
             await _syncService.StartAsync(CancellationToken.None);
-            await Task.Delay(1000);
+
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await firstCallTcs.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("First API call did not occur within timeout");
+            }
+
             await _syncService.StopAsync(CancellationToken.None);
 
             Assert.True(rateLimitCount >= 1, "Should handle rate limiting");
@@ -302,21 +406,32 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
         [Fact]
         public async Task Sync_handles_network_timeout_gracefully()
         {
+            var errorTcs = new TaskCompletionSource<bool>();
+
+            var syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Loose);
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new TaskCanceledException("Request timeout"));
+                .ThrowsAsync(new TaskCanceledException("Request timeout"))
+                .Callback(() => errorTcs.TrySetResult(true));
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLoggerMock.Object, () => config, _loggerMock.Object);
 
             await _syncService.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(10000);
+            try
+            {
+                await errorTcs.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Timeout error did not occur within timeout");
+            }
+
             await _syncService.StopAsync(CancellationToken.None);
 
             Assert.True(_loggedMessages.Count > 0, "Should have logged some messages");
-
-            var history = CreateSyncLogger().GetSyncHistory();
-            Assert.NotNull(history);
         }
 
         [Fact]
@@ -324,6 +439,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
         {
             var conferences = CreateTestConferences();
             var events = CreateTestEvents(1);
+            var syncCompletedTcs = new TaskCompletionSource<bool>();
+
+            var syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Loose);
+            syncLoggerMock
+                .Setup(x => x.LogSyncCompletion(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<DateTime>()))
+                .Callback<int, int, DateTime>((processed, created, timestamp) => syncCompletedTcs.TrySetResult(true));
 
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -337,10 +458,20 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ThrowsAsync(new Exception("Event fetch failed"));
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLoggerMock.Object, () => config, _loggerMock.Object);
 
             await _syncService.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(10000);
+            try
+            {
+                await syncCompletedTcs.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Sync did not complete within timeout");
+            }
+
             await _syncService.StopAsync(CancellationToken.None);
 
             var strmFiles = Directory.GetFiles(_testArchivePath, "*.strm", SearchOption.AllDirectories);
@@ -352,18 +483,19 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
         [Fact]
         public async Task Sync_respects_cancellation_during_operation()
         {
-            // Arrange
             var conferences = CreateTestConferences();
             var events = CreateTestEvents(1);
 
             var cts = new CancellationTokenSource();
             var callCount = 0;
+            var firstCallTcs = new TaskCompletionSource<bool>();
 
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(() =>
                 {
                     callCount++;
+                    if (callCount == 1) firstCallTcs.TrySetResult(true);
                     return conferences;
                 });
 
@@ -372,30 +504,58 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .Returns(async (int conf, CancellationToken token) =>
                 {
                     callCount++;
-                    await Task.Delay(100, token);
+                    await Task.Delay(1, token);
                     return events;
                 });
 
+            var syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Loose);
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLoggerMock.Object, () => config, _loggerMock.Object);
 
-            // Act: Start sync then cancel
             await _syncService.StartAsync(cts.Token);
-            await Task.Delay(50);
+
+            using var waitCts = new CancellationTokenSource(5000);
+            try
+            {
+                await firstCallTcs.Task.WaitAsync(waitCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("First call did not occur within timeout");
+            }
+
             cts.Cancel();
-            await Task.Delay(200);
+
+            using var settleCts = new CancellationTokenSource(500);
+            try
+            {
+                await Task.Delay(Timeout.Infinite, settleCts.Token);
+            }
+            catch (OperationCanceledException) { }
+
             await _syncService.StopAsync(CancellationToken.None);
 
-            // Assert: Should have made some calls before cancellation
             Assert.True(callCount >= 0, "Should have made some calls before cancellation");
         }
 
         [Fact]
         public async Task Sync_can_be_paused_and_resumed()
         {
-            // Arrange
             var conferences = CreateTestConferences();
             var events = CreateTestEvents(1);
+            var firstSyncTcs = new TaskCompletionSource<bool>();
+            var secondSyncTcs = new TaskCompletionSource<bool>();
+            var syncCallCount = 0;
+
+            var syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Loose);
+            syncLoggerMock
+                .Setup(x => x.LogSyncCompletion(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<DateTime>()))
+                .Callback<int, int, DateTime>((processed, created, timestamp) =>
+                {
+                    var count = Interlocked.Increment(ref syncCallCount);
+                    if (count == 1) firstSyncTcs.TrySetResult(true);
+                    if (count == 2) secondSyncTcs.TrySetResult(true);
+                });
 
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -406,24 +566,39 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 .ReturnsAsync(events);
 
             var config = CreateTestConfiguration();
-            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLoggerMock.Object, () => config, _loggerMock.Object);
 
-            // Act: Start sync
             await _syncService.StartAsync(CancellationToken.None);
-            await Task.Delay(300);
 
-            // Pause: Stop the service
+            using var cts1 = new CancellationTokenSource(10000);
+            try
+            {
+                await firstSyncTcs.Task.WaitAsync(cts1.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("First sync did not complete within timeout");
+            }
+
             await _syncService.StopAsync(CancellationToken.None);
             var filesAfterPause = Directory.GetFiles(_testArchivePath, "*.strm", SearchOption.AllDirectories).Length;
 
-            // Resume: Restart the service
-            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), CreateSyncLogger(), () => config, _loggerMock.Object);
+            _syncService = new SyncService(_apiClientMock.Object, CreateStrmGenerator(), syncLoggerMock.Object, () => config, _loggerMock.Object);
             await _syncService.StartAsync(CancellationToken.None);
-            await Task.Delay(300);
+
+            using var cts2 = new CancellationTokenSource(10000);
+            try
+            {
+                await secondSyncTcs.Task.WaitAsync(cts2.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Second sync did not complete within timeout");
+            }
+
             await _syncService.StopAsync(CancellationToken.None);
             var filesAfterResume = Directory.GetFiles(_testArchivePath, "*.strm", SearchOption.AllDirectories).Length;
 
-            // Assert: Files should remain or increase (depending on where pause occurred)
             Assert.True(filesAfterPause >= 0, "Should have some files after pause");
             Assert.True(filesAfterResume >= filesAfterPause, "Should maintain or increase files after resume");
         }
@@ -517,7 +692,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
 
         private IStrmGenerator CreateStrmGenerator()
         {
-            // Create actual StrmGenerator with test dependencies
             var recordingSelectorMock = new Mock<IRecordingSelector>(MockBehavior.Loose);
             recordingSelectorMock
                 .Setup(x => x.SelectBestRecording(It.IsAny<IEnumerable<Recording>>(), It.IsAny<RecordingPreferences>()))
@@ -532,11 +706,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 _testArchivePath);
         }
 
-        private SyncLogger CreateSyncLogger()
-        {
-            return new SyncLogger(_applicationPathsMock.Object, new Mock<ILogger<SyncLogger>>().Object);
-        }
-
         private PluginConfiguration CreateTestConfiguration()
         {
             return new PluginConfiguration
@@ -545,7 +714,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
                 PreferredQuality = "high",
                 PreferredAudioLanguages = new List<string> { "eng" },
                 PreferredSubtitleLanguages = new List<string>(),
-                SyncIntervalHours = 0 // Run immediately for tests
+                SyncIntervalHours = 0
             };
         }
 

@@ -284,7 +284,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     {
                         maxObservedConcurrent = Math.Max(maxObservedConcurrent, current);
                     }
-                    Thread.Sleep(100); // Simulate download time
+                    Thread.Sleep(1);
                     Interlocked.Decrement(ref currentConcurrent);
                 })
                 .ReturnsAsync("downloaded");
@@ -741,9 +741,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             await _service.StartAsync(CancellationToken.None);
             
-            var started = await Task.WhenAny(processingStarted.Task, Task.Delay(2000));
-            
-            Assert.True(started == processingStarted.Task, "Processing loop should have started");
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await processingStarted.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Processing loop should have started within timeout");
+            }
             
             await _service.StopAsync(CancellationToken.None);
         }
@@ -751,12 +757,25 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public async Task StopAsync_cancels_processing_gracefully()
         {
+            var dequeueCalled = new TaskCompletionSource<bool>();
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
+                .Callback(() => dequeueCalled.TrySetResult(true))
                 .ReturnsAsync((DownloadQueueItem?)null);
 
             await _service.StartAsync(CancellationToken.None);
-            await Task.Delay(100);
+
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await dequeueCalled.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Dequeue was not called within timeout");
+            }
+
             await _service.StopAsync(CancellationToken.None);
 
             Assert.True(true);
@@ -766,23 +785,28 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task Process_loop_runs_continuously()
         {
             var processCallCount = 0;
-            var maxCalls = 3;
-            var cts = new CancellationTokenSource();
+            var secondCallTcs = new TaskCompletionSource<bool>();
             
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .Callback(() =>
                 {
                     processCallCount++;
-                    if (processCallCount >= maxCalls)
-                    {
-                        cts.Cancel();
-                    }
+                    if (processCallCount >= 2) secondCallTcs.TrySetResult(true);
                 })
                 .ReturnsAsync((DownloadQueueItem?)null);
 
             await _service.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await secondCallTcs.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Process loop did not run multiple times within timeout");
+            }
 
             Assert.True(processCallCount >= 2, "Process loop should run multiple times");
             
@@ -792,16 +816,19 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public async Task Process_loop_waits_when_queue_empty()
         {
-            // Arrange
             var dequeueCallCount = 0;
             var emptyQueueReturnCount = 0;
+            var firstDequeueTcs = new TaskCompletionSource<bool>();
             
             _queueMock
                 .Setup(x => x.DequeueAsync())
-                .Callback(() => dequeueCallCount++)
+                .Callback(() =>
+                {
+                    dequeueCallCount++;
+                    if (dequeueCallCount == 1) firstDequeueTcs.TrySetResult(true);
+                })
                 .ReturnsAsync(() =>
                 {
-                    // First call returns item, subsequent calls return null
                     if (emptyQueueReturnCount == 0)
                     {
                         emptyQueueReturnCount++;
@@ -826,16 +853,20 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 .Setup(x => x.MarkCompletedAsync(It.IsAny<Guid>()))
                 .Returns(Task.CompletedTask);
 
-            // Act
             await _service.StartAsync(CancellationToken.None);
-            await Task.Delay(200); // Allow processing
 
-            // Stop the service
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await firstDequeueTcs.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Dequeue was not called within timeout");
+            }
+
             await _service.StopAsync(CancellationToken.None);
-            await Task.Delay(100);
 
-            // Assert - Should have called Dequeue initially then waited
-            // Exact count depends on implementation (polling interval)
             Assert.True(dequeueCallCount >= 1, "Should check queue at least once");
         }
 

@@ -262,7 +262,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var item2 = CreateTestItem(userId: userId, eventGuid: "event-2");
 
             await _queue.EnqueueAsync(item1);
-            await Task.Delay(10);
             await _queue.EnqueueAsync(item2);
 
             var dequeuedItem = await _queue.DequeueAsync();

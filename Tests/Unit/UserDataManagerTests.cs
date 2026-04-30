@@ -671,14 +671,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             userDataManager.AddToWatchlist(userId, "event-1");
             var firstUpdate = userDataManager.GetUserData(userId).UpdatedAt;
 
-            // Small delay to ensure timestamp difference
-            Thread.Sleep(10);
-
-            // Act
             userDataManager.AddToWatchlist(userId, "event-2");
             var secondUpdate = userDataManager.GetUserData(userId).UpdatedAt;
 
-            // Assert
             Assert.True(secondUpdate >= firstUpdate);
         }
 

@@ -477,9 +477,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var result1 = await provider.GetMetadata(seriesId, CancellationToken.None);
             Assert.Equal("37C3: Old Title", result1.Item.Name);
 
-            await Task.Delay(80);
+            var pollCts = new CancellationTokenSource(5000);
+            MetadataResult<Series> result2 = default;
+            while (!pollCts.IsCancellationRequested)
+            {
+                await Task.Delay(10, pollCts.Token);
+                result2 = await provider.GetMetadata(seriesId, CancellationToken.None);
+                if (result2.Item.Name == "37C3: Updated Title") break;
+            }
 
-            var result2 = await provider.GetMetadata(seriesId, CancellationToken.None);
             Assert.Equal("37C3: Updated Title", result2.Item.Name);
 
             mockApi.Verify(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()), Times.AtLeast(2));
@@ -525,7 +531,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                    .Returns(async (CancellationToken ct) =>
                    {
                        Interlocked.Increment(ref apiCallCount);
-                       await Task.Delay(50, ct);
+                       using var delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                       delayCts.CancelAfter(50);
+                       try
+                       {
+                           await Task.Delay(Timeout.Infinite, delayCts.Token);
+                       }
+                       catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
                        return (IReadOnlyList<ConferenceDto>)new List<ConferenceDto> { conference };
                    });
 

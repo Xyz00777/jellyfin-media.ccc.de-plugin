@@ -41,14 +41,25 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             _configuration.SyncIntervalHours = 6;
 
+            var syncCompleted = new TaskCompletionSource<bool>();
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new List<ConferenceDto>());
+                .ReturnsAsync(new List<ConferenceDto>())
+                .Callback(() => syncCompleted.TrySetResult(true));
 
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(100);
+
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await syncCompleted.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Sync did not start within timeout");
+            }
 
             _loggerMock.Verify(
                 x => x.Log(
@@ -67,19 +78,38 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             _configuration.SyncIntervalHours = 6;
 
+            var firstSyncCompleted = new TaskCompletionSource<bool>();
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new List<ConferenceDto>());
+                .ReturnsAsync(new List<ConferenceDto>())
+                .Callback(() => firstSyncCompleted.TrySetResult(true));
 
             var service = CreateService();
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(50);
+
+            // Wait for first sync to complete deterministically
+            using var cts1 = new CancellationTokenSource(5000);
+            try
+            {
+                await firstSyncCompleted.Task.WaitAsync(cts1.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("First sync did not complete within timeout");
+            }
 
             await service.StopAsync(CancellationToken.None);
-            await Task.Delay(200);
-            
+
             var initialCallCount = _apiClientMock.Invocations.Count;
-            await Task.Delay(100);
+
+            // Give a small window for any in-flight operations to settle
+            using var cts2 = new CancellationTokenSource(200);
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cts2.Token);
+            }
+            catch (OperationCanceledException) { }
+
             var finalCallCount = _apiClientMock.Invocations.Count;
             Assert.Equal(initialCallCount, finalCallCount);
         }
@@ -95,9 +125,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 new ConferenceDto { Title = "36C3", Acronym = "36c3" }
             };
 
+            var syncCompleted = new TaskCompletionSource<bool>();
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(conferences);
+                .ReturnsAsync(conferences)
+                .Callback(() => syncCompleted.TrySetResult(true));
 
             _strmGeneratorMock
                 .Setup(x => x.StrmFilesExistForConference(It.IsAny<ConferenceDto>()))
@@ -110,7 +142,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await syncCompleted.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Sync did not complete within timeout");
+            }
 
             _apiClientMock.Verify(
                 x => x.GetConferencesAsync(It.IsAny<CancellationToken>()),
@@ -130,9 +171,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 new ConferenceDto { Title = "36C3", Acronym = "36c3", Slug = "36c3" }
             };
 
+            var syncCompleted = new TaskCompletionSource<bool>();
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(conferences);
+                .ReturnsAsync(conferences)
+                .Callback(() => syncCompleted.TrySetResult(true));
             
             _strmGeneratorMock
                 .Setup(x => x.StrmFilesExistForConference(It.IsAny<ConferenceDto>()))
@@ -145,7 +188,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await syncCompleted.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Sync did not complete within timeout");
+            }
 
             _strmGeneratorMock.Verify(
                 x => x.CreateStrmFilesForConference(It.IsAny<ConferenceDto>(), It.IsAny<CancellationToken>()),
@@ -164,9 +216,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 new ConferenceDto { Title = "37C3", Acronym = "37c3", Slug = "37c3" }
             };
 
+            var syncCompleted = new TaskCompletionSource<bool>();
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(conferences);
+                .ReturnsAsync(conferences)
+                .Callback(() => syncCompleted.TrySetResult(true));
 
             _strmGeneratorMock
                 .Setup(x => x.StrmFilesExistForConference(It.IsAny<ConferenceDto>()))
@@ -175,7 +229,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await syncCompleted.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Sync did not complete within timeout");
+            }
 
             _strmGeneratorMock.Verify(
                 x => x.CreateStrmFilesForConference(It.IsAny<ConferenceDto>(), It.IsAny<CancellationToken>()),
@@ -194,9 +257,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 new ConferenceDto { Title = "37C3", Acronym = "37c3" }
             };
 
+            var syncCompleted = new TaskCompletionSource<bool>();
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(conferences);
+                .ReturnsAsync(conferences)
+                .Callback(() => syncCompleted.TrySetResult(true));
 
             _strmGeneratorMock
                 .Setup(x => x.StrmFilesExistForConference(It.IsAny<ConferenceDto>()))
@@ -209,7 +274,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await syncCompleted.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Sync did not complete within timeout");
+            }
 
             _loggerMock.Verify(
                 x => x.Log(
@@ -237,14 +311,25 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             _configuration.SyncIntervalHours = 6;
             
+            var errorLogged = new TaskCompletionSource<bool>();
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new HttpRequestException("API unavailable"));
+                .ThrowsAsync(new HttpRequestException("API unavailable"))
+                .Callback(() => errorLogged.TrySetResult(true));
 
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await errorLogged.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("API error did not occur within timeout");
+            }
 
             _loggerMock.Verify(
                 x => x.Log(
@@ -262,19 +347,38 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task ExecuteAsync_respects_cancellation_token()
         {
             _configuration.SyncIntervalHours = 6;
-            
+
+            var firstSyncCompleted = new TaskCompletionSource<bool>();
             var conferences = new List<ConferenceDto>();
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(conferences);
+                .ReturnsAsync(conferences)
+                .Callback(() => firstSyncCompleted.TrySetResult(true));
 
             var cts = new CancellationTokenSource();
             var service = CreateService();
 
             await service.StartAsync(cts.Token);
-            await Task.Delay(50);
+
+            using var waitCts = new CancellationTokenSource(5000);
+            try
+            {
+                await firstSyncCompleted.Task.WaitAsync(waitCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("First sync did not complete within timeout");
+            }
+
             cts.Cancel();
-            await Task.Delay(100);
+
+            // Give a small window for cancellation to propagate
+            using var settleCts = new CancellationTokenSource(200);
+            try
+            {
+                await Task.Delay(Timeout.Infinite, settleCts.Token);
+            }
+            catch (OperationCanceledException) { }
 
             Assert.True(true);
         }
@@ -286,17 +390,30 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             _configuration.SyncIntervalHours = expectedInterval;
             var config = _configuration;
             
+            var syncCompleted = new TaskCompletionSource<bool>();
             var conferences = new List<ConferenceDto>();
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(conferences);
+                .ReturnsAsync(conferences)
+                .Callback(() => syncCompleted.TrySetResult(true));
 
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(50);
+
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await syncCompleted.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Sync did not complete within timeout");
+            }
 
             Assert.Equal(expectedInterval, config.SyncIntervalHours);
+
+            await service.StopAsync(CancellationToken.None);
         }
 
         [Fact]
@@ -309,9 +426,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 new ConferenceDto { Title = "37C3", Acronym = "37c3" }
             };
 
+            var syncCompleted = new TaskCompletionSource<bool>();
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(conferences);
+                .ReturnsAsync(conferences)
+                .Callback(() => syncCompleted.TrySetResult(true));
 
             _strmGeneratorMock
                 .Setup(x => x.StrmFilesExistForConference(It.IsAny<ConferenceDto>()))
@@ -324,7 +443,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(500);
+
+            using var cts = new CancellationTokenSource(5000);
+            try
+            {
+                await syncCompleted.Task.WaitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Sync did not complete within timeout");
+            }
 
             _syncLoggerMock.Verify(
                 x => x.LogSyncCompletion(
@@ -451,6 +579,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var currentConfig = initialConfig;
 
             var firstSyncTcs = new TaskCompletionSource<bool>();
+            var secondSyncTcs = new TaskCompletionSource<bool>();
             var syncCallCount = 0;
 
             _apiClientMock
@@ -460,6 +589,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 {
                     var count = Interlocked.Increment(ref syncCallCount);
                     if (count == 1) firstSyncTcs.TrySetResult(true);
+                    if (count == 2) secondSyncTcs.TrySetResult(true);
                 });
 
             var service = new SyncService(
@@ -485,7 +615,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             currentConfig = updatedConfig;
 
             await service.TriggerSyncAsync(CancellationToken.None);
-            await Task.Delay(1000);
+
+            using var cts2 = new CancellationTokenSource(5000);
+            try
+            {
+                await secondSyncTcs.Task.WaitAsync(cts2.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("Second sync did not complete within timeout after config change");
+            }
 
             await service.StopAsync(CancellationToken.None);
 
@@ -508,18 +647,43 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             _configuration.SyncIntervalHours = 0;
 
-            var syncCallCount = 0;
             var maxAllowedCalls = 5;
+            var syncCallCount = 0;
+            var firstSyncTcs = new TaskCompletionSource<bool>();
 
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new List<ConferenceDto>())
-                .Callback(() => Interlocked.Increment(ref syncCallCount));
+                .Callback(() =>
+                {
+                    var count = Interlocked.Increment(ref syncCallCount);
+                    if (count == 1) firstSyncTcs.TrySetResult(true);
+                });
 
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(2000);
+
+            // Wait for first sync to complete deterministically
+            using var cts1 = new CancellationTokenSource(5000);
+            try
+            {
+                await firstSyncTcs.Task.WaitAsync(cts1.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("First sync did not complete within timeout");
+            }
+
+            // Wait for the interval delay to elapse (production defaults 0 to 6 hours,
+            // but waits on semaphore with timeout, so give enough time for one more cycle)
+            using var settleCts = new CancellationTokenSource(2000);
+            try
+            {
+                await Task.Delay(Timeout.Infinite, settleCts.Token);
+            }
+            catch (OperationCanceledException) { }
+
             await service.StopAsync(CancellationToken.None);
 
             Assert.True(syncCallCount <= maxAllowedCalls,
@@ -544,21 +708,47 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             _configuration.SyncIntervalHours = 6;
 
             var syncCallCount = 0;
-            var maxAllowedCallsInWindow = 5;
+            var firstErrorTcs = new TaskCompletionSource<bool>();
 
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new HttpRequestException("Transient error"))
-                .Callback(() => Interlocked.Increment(ref syncCallCount));
+                .Callback(() =>
+                {
+                    var count = Interlocked.Increment(ref syncCallCount);
+                    if (count == 1) firstErrorTcs.TrySetResult(true);
+                });
 
             var service = CreateService();
 
             await service.StartAsync(CancellationToken.None);
-            await Task.Delay(3000);
+
+            // Wait deterministically for the first error to occur
+            using var cts1 = new CancellationTokenSource(5000);
+            try
+            {
+                await firstErrorTcs.Task.WaitAsync(cts1.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("First error did not occur within timeout");
+            }
+
+            // Wait additional time to observe limited retries due to backoff
+            // Backoff is exponential: 1min, 2min, 4min... so no more retries
+            // should happen within this short window
+            using var settleCts = new CancellationTokenSource(2000);
+            try
+            {
+                await Task.Delay(Timeout.Infinite, settleCts.Token);
+            }
+            catch (OperationCanceledException) { }
+
             await service.StopAsync(CancellationToken.None);
 
+            var maxAllowedCallsInWindow = 5;
             Assert.True(syncCallCount <= maxAllowedCallsInWindow,
-                $"Expected at most {maxAllowedCallsInWindow} retries in 3s with backoff, " +
+                $"Expected at most {maxAllowedCallsInWindow} retries after first error with backoff, " +
                 $"got {syncCallCount}. No backoff detected.");
 
             _loggerMock.Verify(
@@ -580,7 +770,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 _apiClientMock.Object,
                 _strmGeneratorMock.Object,
                 _syncLoggerMock.Object,
-                () => _configuration, // Provider returns current config instance
+                () => _configuration,
                 _loggerMock.Object);
         }
     }
