@@ -84,12 +84,12 @@
   - Acceptance: Episode metadata loads correctly via ProviderIds, stable episode numbers, Identify dialog works
   - _Files_: `MediaCccEpisodeProvider.cs`, `MediaCccEpisodeProviderTests.cs`, `ServiceRegistrator.cs`
 
-- [ ] **P3-2: Fix TriggerSync (currently a no-op)**
+- [x] **P3-2: Fix TriggerSync (currently a no-op)**
   - C9 (`TriggerSync` logs but never invokes sync)
   - Acceptance: POST to `/media_ccc/sync/trigger` actually triggers a sync
   - _Files_: `SyncController.cs`, `SyncService.cs`, `SyncServiceTests.cs`
 
-- [ ] **P3-3: Fix MediaCccSeriesProvider cache & identify**
+- [x] **P3-3: Fix MediaCccSeriesProvider cache & identify**
   - H1 (`_cachedConferences` never expires, no thread safety)
   - H2 (`GetSearchResults` empty → breaks Identify)
   - Dead code at lines 62-65 (Overview set twice)

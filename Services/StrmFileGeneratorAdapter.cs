@@ -15,7 +15,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
     public class StrmFileGeneratorAdapter : IStrmFileGenerator
     {
         private readonly IRecordingSelector _recordingSelector;
-        private static readonly char[] InvalidFileNameChars = Path.GetInvalidFileNameChars();
 
         public StrmFileGeneratorAdapter(IRecordingSelector recordingSelector)
         {
@@ -51,7 +50,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 Directory.CreateDirectory(directory);
             }
 
-            var sanitizedSlug = SanitizeFileName(@event.Slug ?? @event.Guid ?? "unknown");
+            var sanitizedSlug = StrmHelper.SanitizeFileName(@event.Slug ?? @event.Guid ?? "unknown");
             var filePath = Path.Combine(directory, $"{sanitizedSlug}.strm");
 
             if (File.Exists(filePath))
@@ -60,22 +59,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             }
 
             await File.WriteAllTextAsync(filePath, recording.Url, cancellationToken).ConfigureAwait(false);
-        }
-
-        private static string SanitizeFileName(string fileName)
-        {
-            if (string.IsNullOrEmpty(fileName))
-            {
-                return "unknown";
-            }
-
-            var sanitized = fileName;
-            foreach (var invalidChar in InvalidFileNameChars)
-            {
-                sanitized = sanitized.Replace(invalidChar, '_');
-            }
-
-            return sanitized;
         }
 
         private static Recording MapToRecording(RecordingDto dto)

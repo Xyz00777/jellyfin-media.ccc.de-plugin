@@ -130,7 +130,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert
             Assert.NotNull(result);
-            var expectedPath = Path.Combine(_testArchivePath, "37c3", "Season 01", "opening-ceremony.strm");
+            var expectedPath = Path.Combine(_testArchivePath, "37c3", "Season 02", "opening-ceremony.strm");
             Assert.Equal(expectedPath, result.FilePath);
         }
 

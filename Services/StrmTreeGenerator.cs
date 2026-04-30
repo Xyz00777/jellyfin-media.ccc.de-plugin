@@ -68,7 +68,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private readonly IMediaCccApiClient _apiClient;
         private readonly IStrmFileGenerator _strmGenerator;
         private readonly ILogger<StrmTreeGenerator> _logger;
-        private static readonly char[] InvalidFileNameChars = Path.GetInvalidFileNameChars();
 
         public StrmTreeGenerator(
             IMediaCccApiClient apiClient,
@@ -157,7 +156,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 return;
             }
 
-            var sanitizedAcronym = SanitizeFileName(conference.Acronym?.ToLowerInvariant() ?? "unknown");
+            var sanitizedAcronym = StrmHelper.NormalizeConferenceDirectory(conference.Acronym ?? "unknown");
             var seriesPath = Path.Combine(archivePath, sanitizedAcronym);
 
             if (!Directory.Exists(seriesPath))
@@ -166,8 +165,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 result.SeriesFoldersCreated++;
             }
 
+            var conferenceFirstDay = events
+                .Where(e => !string.IsNullOrEmpty(e.Date) && DateTime.TryParse(e.Date, out _))
+                .Select(e => DateTime.Parse(e.Date!))
+                .OrderBy(d => d)
+                .FirstOrDefault();
+
+            var conferenceFirstDayStr = conferenceFirstDay != default
+                ? conferenceFirstDay.ToString("yyyy-MM-dd")
+                : null;
+
             var eventsByDay = events
-                .GroupBy(e => ExtractDayNumber(e.Date))
+                .GroupBy(e => StrmHelper.ExtractDayNumber(e.Date, conferenceFirstDayStr))
                 .OrderBy(g => g.Key);
 
             var existingFiles = Directory.Exists(seriesPath)
@@ -209,7 +218,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                         await _strmGenerator.GenerateStrmAsync(seasonPath, evt, cancellationToken).ConfigureAwait(false);
                         result.FilesCreated++;
 
-                        var sanitizedSlug = SanitizeFileName(evt.Slug ?? evt.Guid ?? "unknown");
+                        var sanitizedSlug = StrmHelper.SanitizeFileName(evt.Slug ?? evt.Guid ?? "unknown");
                         var fileName = $"{sanitizedSlug}.strm";
                         var filePath = Path.Combine(seasonPath, fileName);
                         currentFiles.Add(filePath);
@@ -224,12 +233,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             // Remove stale files (files that existed before but are no longer in current API response)
             foreach (var existingFile in existingFiles)
             {
-                if (!currentFiles.Contains(existingFile) && File.Exists(existingFile))
+                if (!currentFiles.Contains(existingFile))
                 {
                     try
                     {
                         File.Delete(existingFile);
                         _logger.LogInformation("Removed stale file: {FilePath}", existingFile);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                    }
+                    catch (DirectoryNotFoundException)
+                    {
                     }
                     catch (Exception ex)
                     {
@@ -241,40 +256,5 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             result.ConferencesProcessed++;
         }
 
-        private string SanitizeFileName(string fileName)
-        {
-            if (string.IsNullOrEmpty(fileName))
-            {
-                return "unknown";
-            }
-
-            var sanitized = fileName;
-            foreach (var invalidChar in InvalidFileNameChars)
-            {
-                sanitized = sanitized.Replace(invalidChar, '_');
-            }
-
-            return sanitized;
-        }
-
-        private int? ExtractDayNumber(string? dateString)
-        {
-            if (string.IsNullOrEmpty(dateString))
-            {
-                return null;
-            }
-
-            // Try to parse the date
-            if (DateTime.TryParse(dateString, out var date))
-            {
-                // CCC convention: Congress starts on Dec 27
-                // Day 1 = Dec 28, Day 2 = Dec 29, etc.
-                // Formula: day_number = day_of_month - 27
-                int dayNumber = date.Day - 27;
-                return dayNumber > 0 ? dayNumber : null;
-            }
-
-            return null;
-        }
     }
 }

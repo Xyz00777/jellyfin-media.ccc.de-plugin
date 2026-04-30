@@ -31,8 +31,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private readonly IRecordingSelector _recordingSelector;
         private readonly string _archivePath;
 
-        private static readonly char[] InvalidFileNameChars = Path.GetInvalidFileNameChars();
-
         public StrmGenerator(IMediaCccApiClient apiClient, IRecordingSelector recordingSelector, string archivePath)
         {
             _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
@@ -41,6 +39,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         }
 
         public async Task<StrmResult?> GenerateStrmAsync(Conference conference, Event evt, CancellationToken cancellationToken)
+        {
+            return await GenerateStrmAsync(conference, evt, null, cancellationToken);
+        }
+
+        private async Task<StrmResult?> GenerateStrmAsync(Conference conference, Event evt, string? conferenceFirstDay, CancellationToken cancellationToken)
         {
             if (evt.Recordings == null || !evt.Recordings.Any())
             {
@@ -53,7 +56,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 return null;
             }
 
-            var filePath = BuildStrmFilePath(conference, evt);
+            var filePath = BuildStrmFilePath(conference, evt, conferenceFirstDay);
             var directory = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(directory))
             {
@@ -93,19 +96,29 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                     continue;
                 }
 
+                var conferenceFirstDay = events
+                    .Where(e => !string.IsNullOrEmpty(e.Date) && DateTime.TryParse(e.Date, out _))
+                    .Select(e => DateTime.Parse(e.Date!))
+                    .OrderBy(d => d)
+                    .FirstOrDefault();
+
+                var conferenceFirstDayStr = conferenceFirstDay != default
+                    ? conferenceFirstDay.ToString("yyyy-MM-dd")
+                    : null;
+
                 foreach (var eventDto in events)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
                     var evt = MapToEvent(eventDto);
-                    var filePath = BuildStrmFilePath(conference, evt);
+                    var filePath = BuildStrmFilePath(conference, evt, conferenceFirstDayStr);
 
                     if (File.Exists(filePath))
                     {
                         continue;
                     }
 
-                    var result = await GenerateStrmAsync(conference, evt, cancellationToken).ConfigureAwait(false);
+                    var result = await GenerateStrmAsync(conference, evt, conferenceFirstDayStr, cancellationToken).ConfigureAwait(false);
                     if (result != null)
                     {
                         results.Add(result);
@@ -116,12 +129,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             return results;
         }
 
-        private string BuildStrmFilePath(Conference conference, Event evt)
+        private string BuildStrmFilePath(Conference conference, Event evt, string? conferenceFirstDay = null)
         {
-            var sanitizedAcronym = SanitizeFileName(conference.Acronym);
-            var sanitizedSlug = SanitizeFileName(evt.Slug);
+            var sanitizedAcronym = StrmHelper.NormalizeConferenceDirectory(conference.Acronym);
+            var sanitizedSlug = StrmHelper.SanitizeFileName(evt.Slug);
 
-            int? dayNumber = ExtractDayNumber(evt.Date);
+            int? dayNumber = StrmHelper.ExtractDayNumber(evt.Date, conferenceFirstDay);
 
             string relativePath;
             if (dayNumber.HasValue)
@@ -134,40 +147,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             }
 
             return Path.Combine(_archivePath, relativePath);
-        }
-
-        private string SanitizeFileName(string fileName)
-        {
-            if (string.IsNullOrEmpty(fileName))
-            {
-                return "unknown";
-            }
-
-            var sanitized = fileName;
-            foreach (var invalidChar in InvalidFileNameChars)
-            {
-                sanitized = sanitized.Replace(invalidChar, '_');
-            }
-
-            return sanitized;
-        }
-
-        private int? ExtractDayNumber(string? dateString)
-        {
-            if (string.IsNullOrEmpty(dateString))
-            {
-                return null;
-            }
-
-            if (DateTime.TryParse(dateString, out var date))
-            {
-                // Compute day number relative to Dec 27 (CCC congress start date convention)
-                // Dec 28 = Day 1, Dec 29 = Day 2, etc.
-                int dayNumber = date.Day - 27;
-                return dayNumber > 0 ? dayNumber : null;
-            }
-
-            return null;
         }
 
         private Conference MapToConference(ConferenceDto dto)
@@ -229,26 +208,36 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 return;
             }
 
+            var conferenceFirstDay = events
+                .Where(e => !string.IsNullOrEmpty(e.Date) && DateTime.TryParse(e.Date, out _))
+                .Select(e => DateTime.Parse(e.Date!))
+                .OrderBy(d => d)
+                .FirstOrDefault();
+
+            var conferenceFirstDayStr = conferenceFirstDay != default
+                ? conferenceFirstDay.ToString("yyyy-MM-dd")
+                : null;
+
             foreach (var eventDto in events)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var evt = MapToEvent(eventDto);
-                var filePath = BuildStrmFilePath(conference, evt);
+                var filePath = BuildStrmFilePath(conference, evt, conferenceFirstDayStr);
 
                 if (File.Exists(filePath))
                 {
                     continue;
                 }
 
-                await GenerateStrmAsync(conference, evt, cancellationToken).ConfigureAwait(false);
+                await GenerateStrmAsync(conference, evt, conferenceFirstDayStr, cancellationToken).ConfigureAwait(false);
             }
         }
 
         public bool StrmFilesExistForConference(ConferenceDto conferenceDto)
         {
             var conference = MapToConference(conferenceDto);
-            var conferenceDir = Path.Combine(_archivePath, SanitizeFileName(conference.Acronym));
+            var conferenceDir = Path.Combine(_archivePath, StrmHelper.NormalizeConferenceDirectory(conference.Acronym));
             return Directory.Exists(conferenceDir);
         }
     }

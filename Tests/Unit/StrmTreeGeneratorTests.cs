@@ -86,9 +86,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3");
-            // ExtractDayNumber: Dec 28 -> day 28-27=1 -> Season 01
-            //                    Dec 29 -> day 29-27=2 -> Season 02
-            //                    Dec 30 -> day 30-27=3 -> Season 03
+            // ExtractDayNumber: conferenceFirstDay=Dec 28, so Dec 28 -> Day 1 -> Season 01
+            //                    Dec 29 -> Day 2 -> Season 02
+            //                    Dec 30 -> Day 3 -> Season 03
             var events = new EventDto[]
             {
                 CreateTestEvent(guid: "1", title: "Event 1", date: "2023-12-28"),
@@ -490,7 +490,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var conferences = CreateTestConferences("37c3", "36c3");
             
-            // Dec 27 -> dayNumber=0 -> null (no season), Dec 28 -> dayNumber=1 -> Season 01
+            // Dec 27 -> dayNumber=1 (Season 01), Dec 28 -> dayNumber=2 (Season 02)
+            // With conferenceFirstDay=Dec 27, events are offset from day 1
             var events37c3 = new EventDto[]
             {
                 CreateTestEvent(guid: "1", title: "Event 1", date: "2023-12-27"),
@@ -521,7 +522,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             Assert.Equal(5, result.FilesCreated);
             Assert.Equal(2, result.ConferencesProcessed);
-            Assert.Equal(3, result.SeasonsCreated);
+            Assert.Equal(4, result.SeasonsCreated);
             Assert.Equal(2, result.SeriesFoldersCreated);
         }
 
