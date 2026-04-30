@@ -1,0 +1,12 @@
+{
+  "category": "Metadata",
+  "changelog": "",
+  "name": "Media.CCC.de",
+  "guid": "e225c91a-ef11-41ca-b913-6491f15c2992",
+  "description": "Jellyfin plugin for media.ccc.de conference recordings",
+  "overview": "Browse and watch media.ccc.de conference recordings as TV Series in Jellyfin",
+  "owner": "ncc1031",
+  "targetAbi": "10.11.0.0",
+  "timestamp": "2025-05-01T00:00:00.0000000Z",
+  "version": "1.0.0.0"
+}

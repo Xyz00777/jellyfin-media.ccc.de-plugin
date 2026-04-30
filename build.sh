@@ -59,6 +59,20 @@ build_release() {
     echo "  Windows: C:\\ProgramData\\Jellyfin\\Server\\plugins\\"
 }
 
+package() {
+    echo -e "${GREEN}Packaging plugin for distribution...${NC}"
+    mkdir -p "$SCRIPT_DIR/dist"
+
+    cp "$SCRIPT_DIR/bin/Release/net9.0/Jellyfin.Plugin.MediaCccDe.dll" "$SCRIPT_DIR/dist/"
+    cp "$SCRIPT_DIR/meta.json" "$SCRIPT_DIR/dist/"
+
+    cd "$SCRIPT_DIR/dist"
+    zip -j media-ccc-de-plugin-1.0.0.zip Jellyfin.Plugin.MediaCccDe.dll meta.json
+    cd "$SCRIPT_DIR"
+
+    echo -e "${GREEN}Package created: dist/media-ccc-de-plugin-1.0.0.zip${NC}"
+}
+
 test() {
     echo -e "${GREEN}Running tests...${NC}"
     dotnet test "$SCRIPT_DIR/Jellyfin.Plugin.MediaCccDe.sln" --verbosity normal
@@ -75,12 +89,13 @@ clean() {
 help() {
     echo "Jellyfin Media.CCC.de Plugin - Build Script"
     echo ""
-    echo "Usage: $0 {build|test|release|clean|help}"
+    echo "Usage: $0 {build|test|release|package|clean|help}"
     echo ""
     echo "Commands:"
     echo "  build     Build the plugin (Debug)"
     echo "  test      Build and run all tests"
-    echo "  release   Build Release configuration"
+    echo "  release   Build Release, run tests, and package ZIP"
+    echo "  package   Package DLL + meta.json into distributable ZIP"
     echo "  clean     Remove all build artifacts"
     echo "  help      Show this help message"
     echo ""
@@ -98,7 +113,8 @@ check_dotnet
 case "${1:-build}" in
     build)   build;;
     test)    build && test;;
-    release) build_release;;
+    release) build_release && test && package;;
+    package) package;;
     clean)   clean;;
     help|-h|--help) help;;
     *)

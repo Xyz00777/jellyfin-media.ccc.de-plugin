@@ -179,7 +179,7 @@
 
 ## Phase 7 — Project Hygiene & Packaging
 
-- [ ] **P7-1: Move interfaces out of implementation files**
+- [x] **P7-1: Move interfaces out of implementation files**
   - `ILanguageSelector` → own file
   - `IStrmGenerator` + `StrmResult` → own files
   - `ISyncLogger` + `SyncLogEntry` + `SyncStatus` → own files
@@ -196,7 +196,7 @@
   - Add `coverlet.collector` for code coverage
   - Acceptance: `build.sh release` produces distributable plugin ZIP
 
-- [ ] **P7-3: Code hygiene fixes**
+- [x] **P7-3: Code hygiene fixes**
   - Break up `GlobalUsings.cs` — remove Services namespace, keep only truly global usings
   - Fix broken HTML `</</div>` in `sync-log.js`
   - Fix `formatDuration` misnaming + incorrect "Duration" label
