@@ -165,7 +165,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         public async Task PersistAsync(Guid userId)
         {
             string filePath;
-            UserData? dataToSave;
+            string json;
 
             lock (_lock)
             {
@@ -176,18 +176,22 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                     Directory.CreateDirectory(directory);
                 }
 
-                _cache.TryGetValue(userId, out dataToSave);
-            }
-
-            if (dataToSave != null)
-            {
-                var json = JsonSerializer.Serialize(dataToSave, new JsonSerializerOptions
+                if (_cache.TryGetValue(userId, out var dataToSave))
                 {
-                    WriteIndented = true
-                });
-
-                await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
+                    // Serialize a deep copy to avoid concurrent modification during async write
+                    json = JsonSerializer.Serialize(dataToSave, new JsonSerializerOptions
+                    {
+                        WriteIndented = true,
+                        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+                    });
+                }
+                else
+                {
+                    return;
+                }
             }
+
+            await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
         }
 
         public async Task LoadAsync(Guid userId)
@@ -209,7 +213,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             try
             {
                 var json = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
-                var userData = JsonSerializer.Deserialize<UserData>(json);
+                var userData = JsonSerializer.Deserialize<UserData>(json, new JsonSerializerOptions
+                {
+                    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+                });
 
                 lock (_lock)
                 {
@@ -226,6 +233,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             catch (JsonException ex)
             {
                 _logger.LogWarning(ex, "Failed to parse user data from {FilePath}. Starting with empty data.", filePath);
+
+                lock (_lock)
+                {
+                    _cache[userId] = GetOrCreateUserData(userId);
+                }
+            }
+            catch (IOException ex)
+            {
+                _logger.LogWarning(ex, "Failed to read user data from {FilePath}. Starting with empty data.", filePath);
 
                 lock (_lock)
                 {

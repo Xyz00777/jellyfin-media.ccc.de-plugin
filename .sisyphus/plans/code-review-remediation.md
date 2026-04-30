@@ -115,7 +115,7 @@
 
 ## Phase 5 — Runtime Robustness
 
-- [ ] **P5-1: Fix configuration change detection**
+- [x] **P5-1: Fix configuration change detection**
   - H9 (SyncService captures `PluginConfiguration` snapshot → runtime changes ignored)
   - H10 (`SyncIntervalHours <= 0` → infinite busy loop)
   - H13 (No retry backoff on transient errors in `SyncService`)

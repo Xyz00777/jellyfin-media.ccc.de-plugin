@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Models;
@@ -502,6 +503,61 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var expectedTotal = 50;
             var queueLength = await _queue.GetQueueLengthAsync();
             Assert.True(queueLength + dequeueCount <= expectedTotal);
+        }
+
+        #endregion
+
+        #region Atomic Write Tests
+
+        [Fact]
+        public async Task PersistAsync_writes_atomically_with_temp_and_rename()
+        {
+            var item = CreateTestItem();
+            await _queue.EnqueueAsync(item);
+
+            var filePath = Path.Combine(
+                _testDataPath,
+                "plugins",
+                "ccc-media",
+                "data",
+                "download-queue.json"
+            );
+            var tempFile = filePath + ".tmp";
+
+            Assert.True(File.Exists(filePath));
+            Assert.False(File.Exists(tempFile));
+
+            var json = await File.ReadAllTextAsync(filePath);
+            Assert.Contains("Pending", json);
+            Assert.DoesNotContain("\"Status\": 0", json);
+
+            var options = new JsonSerializerOptions
+            {
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            };
+            var items = JsonSerializer.Deserialize<List<DownloadQueueItem>>(json, options);
+            Assert.NotNull(items);
+            Assert.Single(items!);
+            Assert.Equal(DownloadStatus.Pending, items![0].Status);
+        }
+
+        [Fact]
+        public async Task PersistAsync_no_temp_file_remains_after_write()
+        {
+            var item = CreateTestItem();
+            await _queue.EnqueueAsync(item);
+
+            var filePath = Path.Combine(
+                _testDataPath,
+                "plugins",
+                "ccc-media",
+                "data",
+                "download-queue.json"
+            );
+            var tempFile = filePath + ".tmp";
+
+            Assert.False(File.Exists(tempFile));
+            Assert.True(File.Exists(filePath));
         }
 
         #endregion

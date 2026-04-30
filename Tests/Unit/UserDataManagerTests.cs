@@ -150,7 +150,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Assert.True(File.Exists(filePath));
             
             var json = await File.ReadAllTextAsync(filePath);
-            var loadedUserData = JsonSerializer.Deserialize<UserData>(json);
+            var loadedUserData = JsonSerializer.Deserialize<UserData>(json, new JsonSerializerOptions
+            {
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            });
             
             Assert.NotNull(loadedUserData);
             Assert.Equal(userId, loadedUserData!.UserId);
@@ -756,6 +759,118 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             var userData = new UserData();
             Assert.IsType<HashSet<string>>(userData.PreferredSubtitleLanguages);
+        }
+
+        #endregion
+
+        #region PersistAsync Thread Safety Tests
+
+        [Fact]
+        public async Task PersistAsync_serializes_deep_copy_not_live_collection()
+        {
+            var userDataManager = CreateUserDataManager();
+            var userId = Guid.NewGuid();
+
+            for (int i = 0; i < 100; i++)
+            {
+                userDataManager.AddToWatchlist(userId, $"event-{i}");
+            }
+
+            var persistTask = userDataManager.PersistAsync(userId);
+            for (int i = 100; i < 200; i++)
+            {
+                userDataManager.AddToWatchlist(userId, $"event-{i}");
+            }
+            await persistTask;
+
+            var filePath = Path.Combine(_testDataPath, "plugins", "ccc-media", "data", $"user-{userId}.json");
+            Assert.True(File.Exists(filePath));
+
+            var json = await File.ReadAllTextAsync(filePath);
+            var exception = Record.Exception(() =>
+                JsonSerializer.Deserialize<UserData>(json, new JsonSerializerOptions
+                {
+                    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+                }));
+            Assert.Null(exception);
+        }
+
+        [Fact]
+        public async Task PersistAsync_concurrent_mutations_do_not_corrupt_data()
+        {
+            var userDataManager = CreateUserDataManager();
+            var userId = Guid.NewGuid();
+
+            var tasks = new List<Task>();
+            for (int i = 0; i < 20; i++)
+            {
+                var index = i;
+                tasks.Add(Task.Run(async () =>
+                {
+                    for (int j = 0; j < 10; j++)
+                    {
+                        userDataManager.AddToWatchlist(userId, $"event-{index}-{j}");
+                    }
+                    await userDataManager.PersistAsync(userId);
+                }));
+            }
+
+            await Task.WhenAll(tasks);
+
+            var watchlist = userDataManager.GetWatchlist(userId);
+            Assert.True(watchlist.Count > 0);
+            Assert.True(watchlist.Count <= 200);
+        }
+
+        #endregion
+
+        #region LoadAsync IOException Tests
+
+        [Fact]
+        public async Task LoadAsync_handles_IOException_gracefully()
+        {
+            var userId = Guid.NewGuid();
+            var filePath = Path.Combine(_testDataPath, "plugins", "ccc-media", "data", $"user-{userId}.json");
+            Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+
+            await File.WriteAllTextAsync(filePath, "valid json placeholder");
+
+            var userDataManager = CreateUserDataManager();
+
+            File.Delete(filePath);
+            using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                var exception = await Record.ExceptionAsync(() => userDataManager.LoadAsync(userId));
+                Assert.Null(exception);
+            }
+
+            var userData = userDataManager.GetUserData(userId);
+            Assert.NotNull(userData);
+            Assert.Empty(userData.Watchlist);
+        }
+
+        #endregion
+
+        #region JsonStringEnumConverter Tests
+
+        [Fact]
+        public async Task PersistAsync_uses_JsonStringEnumConverter_for_UserData()
+        {
+            var userDataManager = CreateUserDataManager();
+            var userId = Guid.NewGuid();
+
+            userDataManager.AddToWatchlist(userId, "event-1");
+            await userDataManager.PersistAsync(userId);
+
+            var filePath = Path.Combine(_testDataPath, "plugins", "ccc-media", "data", $"user-{userId}.json");
+            var json = await File.ReadAllTextAsync(filePath);
+
+            var options = new JsonSerializerOptions
+            {
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            };
+            var exception = Record.Exception(() => JsonSerializer.Deserialize<UserData>(json, options));
+            Assert.Null(exception);
         }
 
         #endregion

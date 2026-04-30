@@ -89,6 +89,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private readonly ILogger<SyncLogger> _logger;
         private readonly int _maxHistoryEntries;
         private readonly object _lock = new object();
+        private readonly SemaphoreSlim _persistLock = new SemaphoreSlim(1, 1);
         private List<SyncLogEntry> _history = new List<SyncLogEntry>();
 
         public SyncLogger(IApplicationPaths applicationPaths, ILogger<SyncLogger> logger, int maxHistoryEntries = 100)
@@ -175,23 +176,35 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
         public async Task PersistAsync()
         {
-            string filePath;
-            lock (_lock)
+            await _persistLock.WaitAsync().ConfigureAwait(false);
+            try
             {
-                filePath = GetFilePath();
-                var directory = Path.GetDirectoryName(filePath);
-                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                string filePath;
+                List<SyncLogEntry> snapshot;
+                lock (_lock)
                 {
-                    Directory.CreateDirectory(directory);
+                    filePath = GetFilePath();
+                    var directory = Path.GetDirectoryName(filePath);
+                    if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                    {
+                        Directory.CreateDirectory(directory);
+                    }
+
+                    snapshot = _history.ToList();
                 }
+
+                var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+                });
+
+                await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
             }
-
-            var json = JsonSerializer.Serialize(_history, new JsonSerializerOptions
+            finally
             {
-                WriteIndented = true
-            });
-
-            await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
+                _persistLock.Release();
+            }
         }
 
         public async Task LoadAsync()
@@ -210,7 +223,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             try
             {
                 var json = await File.ReadAllTextAsync(filePath).ConfigureAwait(false);
-                var entries = JsonSerializer.Deserialize<List<SyncLogEntry>>(json);
+                var entries = JsonSerializer.Deserialize<List<SyncLogEntry>>(json, new JsonSerializerOptions
+                {
+                    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+                });
 
                 lock (_lock)
                 {
@@ -222,6 +238,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             {
                 _logger.LogWarning(ex, "Failed to parse sync logs from {FilePath}. Starting with empty history.", filePath);
                 
+                lock (_lock)
+                {
+                    _history.Clear();
+                }
+            }
+            catch (IOException ex)
+            {
+                _logger.LogWarning(ex, "Failed to read sync logs from {FilePath}. Starting with empty history.", filePath);
+
                 lock (_lock)
                 {
                     _history.Clear();

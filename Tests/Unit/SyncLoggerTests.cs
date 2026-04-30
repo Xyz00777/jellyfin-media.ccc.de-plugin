@@ -191,7 +191,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Assert.True(File.Exists(filePath));
             
             var json = await File.ReadAllTextAsync(filePath);
-            var entries = JsonSerializer.Deserialize<List<SyncLogEntry>>(json);
+            var entries = JsonSerializer.Deserialize<List<SyncLogEntry>>(json, new JsonSerializerOptions
+            {
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            });
             
             Assert.NotNull(entries);
             Assert.Single(entries);
@@ -218,7 +221,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             var filePath = Path.Combine(_testDataPath, "sync-logs.json");
             Directory.CreateDirectory(_testDataPath);
-            var json = JsonSerializer.Serialize(entries);
+            var json = JsonSerializer.Serialize(entries, new JsonSerializerOptions
+            {
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            });
             await File.WriteAllTextAsync(filePath, json);
 
             // Act
@@ -344,6 +350,107 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<Exception>(),
                     It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once());
+        }
+
+        [Fact]
+        public async Task PersistAsync_is_thread_safe_under_concurrent_modifications()
+        {
+            var syncLogger = CreateSyncLogger();
+            var now = DateTime.UtcNow;
+
+            for (int i = 0; i < 10; i++)
+            {
+                syncLogger.LogSyncStart($"conf{i}", now.AddMinutes(-i));
+            }
+
+            var tasks = new List<Task>();
+            for (int i = 0; i < 20; i++)
+            {
+                var index = i;
+                tasks.Add(Task.Run(async () =>
+                {
+                    await syncLogger.PersistAsync();
+                }));
+                tasks.Add(Task.Run(() =>
+                {
+                    syncLogger.LogSyncStart($"concurrent{index}", DateTime.UtcNow);
+                }));
+            }
+
+            await Task.WhenAll(tasks);
+
+            var filePath = Path.Combine(_testDataPath, "sync-logs.json");
+            Assert.True(File.Exists(filePath));
+            var json = await File.ReadAllTextAsync(filePath);
+            var exception = Record.Exception(() =>
+                JsonSerializer.Deserialize<List<SyncLogEntry>>(json, new JsonSerializerOptions
+                {
+                    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+                }));
+            Assert.Null(exception);
+        }
+
+        [Fact]
+        public async Task PersistAsync_reads_history_inside_lock()
+        {
+            var syncLogger = CreateSyncLogger();
+
+            syncLogger.LogSyncStart("37c3", DateTime.UtcNow);
+            syncLogger.LogSyncComplete("37c3", 150, 148);
+
+            var historyBefore = syncLogger.GetSyncHistory();
+            Assert.Single(historyBefore);
+            Assert.Equal(SyncStatus.Completed, historyBefore[0].Status);
+
+            await syncLogger.PersistAsync();
+
+            var filePath = Path.Combine(_testDataPath, "sync-logs.json");
+            var json = await File.ReadAllTextAsync(filePath);
+
+            var options = new JsonSerializerOptions
+            {
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            };
+            var deserialized = JsonSerializer.Deserialize<List<SyncLogEntry>>(json, options);
+            Assert.NotNull(deserialized);
+            Assert.Single(deserialized!);
+            Assert.Equal(SyncStatus.Completed, deserialized[0].Status);
+            Assert.Equal("Started", JsonSerializer.Serialize(SyncStatus.Started, options).Trim('"'));
+        }
+
+        [Fact]
+        public async Task PersistAsync_uses_JsonStringEnumConverter_for_SyncStatus()
+        {
+            var syncLogger = CreateSyncLogger();
+            syncLogger.LogSyncStart("37c3", DateTime.UtcNow);
+
+            await syncLogger.PersistAsync();
+
+            var filePath = Path.Combine(_testDataPath, "sync-logs.json");
+            var json = await File.ReadAllTextAsync(filePath);
+            Assert.Contains("Started", json);
+            Assert.DoesNotContain("\"Status\": 0", json);
+        }
+
+        [Fact]
+        public async Task LoadAsync_handles_IOException_gracefully()
+        {
+            var filePath = Path.Combine(_testDataPath, "sync-logs.json");
+            Directory.CreateDirectory(_testDataPath);
+
+            await File.WriteAllTextAsync(filePath, "test content");
+
+            var syncLogger = CreateSyncLogger();
+
+            File.Delete(filePath);
+            using (var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                var exception = await Record.ExceptionAsync(() => syncLogger.LoadAsync());
+                Assert.Null(exception);
+            }
+
+            var history = syncLogger.GetSyncHistory();
+            Assert.Empty(history);
         }
 
         private SyncLogger CreateSyncLogger(int maxHistoryEntries = 100)

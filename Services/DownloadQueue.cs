@@ -202,32 +202,48 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             await PersistAsync().ConfigureAwait(false);
         }
 
+        private readonly SemaphoreSlim _persistLock = new SemaphoreSlim(1, 1);
+
         private async Task PersistAsync()
         {
             string filePath;
+            string json;
             lock (_lock)
             {
                 filePath = GetFilePath();
-                var directory = Path.GetDirectoryName(filePath);
-                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                var itemsToSave = _queue.Values.ToList();
+                json = JsonSerializer.Serialize(itemsToSave, new JsonSerializerOptions
                 {
-                    Directory.CreateDirectory(directory);
+                    WriteIndented = true,
+                    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+                });
+            }
+
+            var directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            await _persistLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var tempPath = filePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    await File.WriteAllTextAsync(tempPath, json).ConfigureAwait(false);
+                    File.Move(tempPath, filePath, overwrite: true);
+                }
+                catch
+                {
+                    try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+                    throw;
                 }
             }
-
-            List<DownloadQueueItem> itemsToSave;
-            lock (_lock)
+            finally
             {
-                itemsToSave = _queue.Values.ToList();
+                _persistLock.Release();
             }
-
-            var json = JsonSerializer.Serialize(itemsToSave, new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-            });
-
-            await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
         }
 
         private async Task LoadAsync()
@@ -266,6 +282,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             catch (JsonException ex)
             {
                 _logger.LogWarning(ex, "Failed to parse download queue from {FilePath}. Starting with empty queue.", filePath);
+
+                lock (_lock)
+                {
+                    _queue.Clear();
+                }
+            }
+            catch (IOException ex)
+            {
+                _logger.LogWarning(ex, "Failed to read download queue from {FilePath}. Starting with empty queue.", filePath);
 
                 lock (_lock)
                 {
