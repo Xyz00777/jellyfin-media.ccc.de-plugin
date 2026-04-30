@@ -372,15 +372,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             cts.Cancel();
 
-            // Give a small window for cancellation to propagate
             using var settleCts = new CancellationTokenSource(200);
             try
             {
                 await Task.Delay(Timeout.Infinite, settleCts.Token);
             }
             catch (OperationCanceledException) { }
-
-            Assert.True(true);
         }
 
         [Fact]

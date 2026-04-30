@@ -88,5 +88,8 @@ artifacts/
 .direnv/
 result
 
+## Sisyphus
+.sisyphus/
+
 ## macOS
 .DS_Store

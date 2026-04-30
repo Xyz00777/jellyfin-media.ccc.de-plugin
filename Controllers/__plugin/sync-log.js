@@ -126,7 +126,7 @@
                     <div>No sync history available</div>
                     <div style="font-size: 0.6875rem; margin-top: 0.5rem; opacity: 0.5;">
                         Trigger a manual sync to create the first entry
-                    </</div>
+                    </div>
                 </div>
             `;
             return;
@@ -150,7 +150,7 @@
         const formattedTime = formatTimestamp(entry.timestamp);
 
         const duration = entry.status !== STATUS_STARTED
-            ? formatDuration(entry.filesCreated)
+            ? formatFileCount(entry.filesCreated)
             : 'In progress';
 
         return `
@@ -220,7 +220,7 @@
         });
     }
 
-    function formatDuration(filesCreated) {
+    function formatFileCount(filesCreated) {
         if (!filesCreated || filesCreated === 0) {
             return 'No files';
         }

@@ -777,8 +777,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             }
 
             await _service.StopAsync(CancellationToken.None);
-
-            Assert.True(true);
         }
 
         [Fact]

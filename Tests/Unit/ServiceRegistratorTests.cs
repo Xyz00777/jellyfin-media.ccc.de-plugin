@@ -7,6 +7,7 @@ using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Http;
 using Moq;
 using Xunit;
 
@@ -97,7 +98,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
 
             var httpClientFactoryDescriptor = serviceCollection.FirstOrDefault(s =>
-                s.ServiceType.Name.Contains("IHttpClientFactory"));
+                s.ServiceType == typeof(IHttpClientFactory));
             Assert.NotNull(httpClientFactoryDescriptor);
         }
 

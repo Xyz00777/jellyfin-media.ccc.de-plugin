@@ -9,22 +9,6 @@ using Jellyfin.Plugin.MediaCccDe.Models;
 
 namespace Jellyfin.Plugin.MediaCccDe.Services
 {
-    public interface IStrmGenerator
-    {
-        Task<StrmResult?> GenerateStrmAsync(Conference conference, Event evt, CancellationToken cancellationToken);
-        Task<List<StrmResult>> GenerateSeriesStrmTreeAsync(CancellationToken cancellationToken);
-        Task CreateStrmFilesForConference(ConferenceDto conference, CancellationToken cancellationToken);
-        bool StrmFilesExistForConference(ConferenceDto conference);
-    }
-
-    public class StrmResult
-    {
-        public string FilePath { get; set; } = string.Empty;
-        public string RecordingUrl { get; set; } = string.Empty;
-        public string ConferenceAcronym { get; set; } = string.Empty;
-        public string EventSlug { get; set; } = string.Empty;
-    }
-
     public class StrmGenerator : IStrmGenerator
     {
         private readonly IMediaCccApiClient _apiClient;
