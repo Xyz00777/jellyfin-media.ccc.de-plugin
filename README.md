@@ -11,6 +11,27 @@ A Jellyfin plugin that integrates media.ccc.de conference recordings into your J
 - **Admin Sync Progress**: View sync history and status in the admin panel
 - **Automatic Library Setup**: Creates Archive library automatically on startup
 
+## Compatibility
+
+| Plugin version | Jellyfin | .NET  |
+|----------------|----------|-------|
+| 1.1.0          | 12.0+    | 10.0  |
+
+Plugin 1.1.0 is built against the Jellyfin 12 API and **requires Jellyfin 12.2 or
+newer**. Jellyfin 10.11 is not supported by this version, because Jellyfin 12
+requires .NET 10 and the plugin is compiled against the 12.x API surface. Older
+servers will report the plugin as unsupported and refuse to load it. Use plugin
+version 1.0.1 if you must stay on Jellyfin 10.11.
+
+`targetAbi` in `meta.json` must stay in sync with the `Jellyfin.Controller`
+package version in the `.csproj`. The plugin is compiled against version
+`12.2.0.0` of Jellyfin's shared assemblies, and a Jellyfin server cannot satisfy
+a reference to a *newer* assembly than the one it ships: declaring a lower
+`targetAbi` makes the server accept the plugin and then disable it at load time
+with `Could not load file or assembly 'MediaBrowser.Controller'`. Supporting an
+older 12.x server therefore requires building against that server's package
+version, not just lowering `targetAbi`.
+
 ## Installation
 
 ### From Release
@@ -24,15 +45,32 @@ A Jellyfin plugin that integrates media.ccc.de conference recordings into your J
 ### From Source
 
 ```bash
-git clone https://github.com/your-repo/jellyfin_ccc-media-de
+git clone https://github.com/ncc1031/jellyfin_ccc-media-de
 cd jellyfin_ccc-media-de
 dotnet build --configuration Release
 ```
 
-Copy the built DLL to your Jellyfin plugins directory:
+Copy both the built DLL and `meta.json` to a versioned Jellyfin plugin directory:
 - Linux: `/var/lib/jellyfin/plugins/`
 - Windows: `C:\ProgramData\Jellyfin\Server\plugins\`
 - macOS: `~/.local/share/jellyfin/plugins/`
+
+### Fully Automatic Podman Smoke Test
+
+With Podman, `curl`, and `jq` installed, run:
+
+```bash
+bash scripts/podman-smoke-test.sh
+```
+
+The script builds the release package, starts a disposable Jellyfin `12.2`
+container, installs the plugin into its mounted configuration, creates the
+first administrator through Jellyfin's startup API, authenticates, verifies
+the plugin is loaded, checks an authenticated addon endpoint, verifies
+acronym-based event hydration with recordings, and fetches live conference
+data from `media.ccc.de`. The container and temporary data are removed
+automatically. Set `KEEP_TEST_DATA=1` to retain the data for failure inspection,
+or `SKIP_BUILD=1` to reuse the existing release output.
 
 ## Configuration
 
@@ -40,7 +78,7 @@ After installation, configure the plugin in Jellyfin Dashboard > Plugins > Media
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| Watchlist Path | Directory for downloaded watchlist videos | `/config/plugins/ccc-media/watchlists/` |
+| Watchlist Path | Directory for downloaded watchlist videos; empty uses Jellyfin's plugin configuration directory | empty |
 | Preferred Quality | Video quality preference | HD |
 | Sync Interval | How often to check for new content | 6 hours |
 
@@ -123,8 +161,8 @@ Files:
 
 ### Prerequisites
 
-- .NET 9.0 SDK
-- Jellyfin 10.11+
+- .NET 10.0 SDK
+- Jellyfin 12.2+
 
 ### Building
 
@@ -149,7 +187,7 @@ dotnet test
 
 ### Technology Stack
 
-- **.NET 9.0** - Target framework
+- **.NET 10.0** - Target framework (required by Jellyfin 12)
 - **Jellyfin.Controller** - Plugin API
 - **ASP.NET Core** - API controllers
 - **xUnit + Moq** - Testing
@@ -181,8 +219,8 @@ MIT License - See LICENSE file for details
 
 ## Support
 
-- Issues: [GitHub Issues](https://github.com/your-repo/jellyfin_ccc-media-de/issues)
-- Discussions: [GitHub Discussions](https://github.com/your-repo/jellyfin_ccc-media-de/discussions)
+- Issues: [GitHub Issues](https://github.com/ncc1031/jellyfin_ccc-media-de/issues)
+- Discussions: [GitHub Discussions](https://github.com/ncc1031/jellyfin_ccc-media-de/discussions)
 
 ## Credits
 

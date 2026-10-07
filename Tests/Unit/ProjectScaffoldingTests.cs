@@ -20,7 +20,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests
         private static string SolutionPath => Path.Combine(GetProjectRoot(), "Jellyfin.Plugin.MediaCccDe.sln");
 
         [Fact]
-        public void csproj_targets_net9_0()
+        public void csproj_targets_net10_0()
         {
             // Arrange
             Assert.True(File.Exists(CsprojPath), $"Project file {CsprojPath} should exist");
@@ -34,7 +34,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests
             
             // Assert
             Assert.NotNull(targetFramework);
-            Assert.Equal("net9.0", targetFramework?.Value);
+            Assert.Equal("net10.0", targetFramework?.Value);
         }
 
         [Fact]

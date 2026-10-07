@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Easy build script for systems without nix
-# Prerequisites: .NET 9.0 SDK (https://dotnet.microsoft.com/download/dotnet/9.0)
+# Prerequisites: .NET 10.0 SDK (https://dotnet.microsoft.com/download/dotnet/10.0)
 #
 # Usage:
 #   ./build.sh           - Build the plugin
@@ -21,10 +21,10 @@ check_dotnet() {
     if ! command -v dotnet &> /dev/null; then
         echo -e "${RED}ERROR: dotnet SDK not found${NC}"
         echo ""
-        echo "Install .NET 9.0 SDK first:"
-        echo "  Linux:   https://dotnet.microsoft.com/download/dotnet/9.0"
+        echo "Install .NET 10.0 SDK first:"
+        echo "  Linux:   https://dotnet.microsoft.com/download/dotnet/10.0"
         echo "  macOS:   brew install dotnet-sdk"
-        echo "  Windows: https://dotnet.microsoft.com/download/dotnet/9.0"
+        echo "  Windows: https://dotnet.microsoft.com/download/dotnet/10.0"
         echo ""
         echo "Or use nix:"
         echo "  nix develop              (if you have nix with flakes)"
@@ -33,10 +33,10 @@ check_dotnet() {
     fi
 
     local version=$(dotnet --version 2>/dev/null || echo "0")
-    if [[ ! "$version" =~ ^9 ]]; then
-        echo -e "${YELLOW}WARNING: dotnet version $version detected, but .NET 9.0 is recommended${NC}"
-        echo "  The plugin targets net9.0. Build may fail."
-        echo "  Download: https://dotnet.microsoft.com/download/dotnet/9.0"
+    if [[ ! "$version" =~ ^10 ]]; then
+        echo -e "${YELLOW}WARNING: dotnet version $version detected, but .NET 10.0 is recommended${NC}"
+        echo "  The plugin targets net10.0. Build may fail."
+        echo "  Download: https://dotnet.microsoft.com/download/dotnet/10.0"
     fi
 }
 
@@ -51,7 +51,7 @@ build_release() {
     dotnet build "$SCRIPT_DIR/Jellyfin.Plugin.MediaCccDe.sln" -c Release
     echo -e "${GREEN}Release build complete!${NC}"
     echo ""
-    echo "Output: bin/Release/net9.0/Jellyfin.Plugin.MediaCccDe.dll"
+    echo "Output: bin/Release/net10.0/Jellyfin.Plugin.MediaCccDe.dll"
     echo ""
     echo "Copy to Jellyfin plugin directory:"
     echo "  Linux:   /var/lib/jellyfin/plugins/"
@@ -61,21 +61,29 @@ build_release() {
 
 package() {
     echo -e "${GREEN}Packaging plugin for distribution...${NC}"
+    local version="1.1.0"
     mkdir -p "$SCRIPT_DIR/dist"
 
-    cp "$SCRIPT_DIR/bin/Release/net9.0/Jellyfin.Plugin.MediaCccDe.dll" "$SCRIPT_DIR/dist/"
+    cp "$SCRIPT_DIR/bin/Release/net10.0/Jellyfin.Plugin.MediaCccDe.dll" "$SCRIPT_DIR/dist/"
     cp "$SCRIPT_DIR/meta.json" "$SCRIPT_DIR/dist/"
 
     cd "$SCRIPT_DIR/dist"
-    zip -j media-ccc-de-plugin-1.0.0.zip Jellyfin.Plugin.MediaCccDe.dll meta.json
+    if command -v zip &> /dev/null; then
+        zip -j "media-ccc-de-plugin-${version}.zip" Jellyfin.Plugin.MediaCccDe.dll meta.json
+    elif command -v python3 &> /dev/null; then
+        python3 -m zipfile -c "media-ccc-de-plugin-${version}.zip" Jellyfin.Plugin.MediaCccDe.dll meta.json
+    else
+        echo -e "${RED}ERROR: zip or python3 is required for packaging${NC}"
+        exit 1
+    fi
     cd "$SCRIPT_DIR"
 
-    echo -e "${GREEN}Package created: dist/media-ccc-de-plugin-1.0.0.zip${NC}"
+    echo -e "${GREEN}Package created: dist/media-ccc-de-plugin-${version}.zip${NC}"
 }
 
 test() {
     echo -e "${GREEN}Running tests...${NC}"
-    dotnet test "$SCRIPT_DIR/Jellyfin.Plugin.MediaCccDe.sln" --verbosity normal
+    dotnet test "$SCRIPT_DIR/Jellyfin.Plugin.MediaCccDe.sln" -c Release --verbosity normal
     echo -e "${GREEN}Tests complete!${NC}"
 }
 
@@ -100,7 +108,7 @@ help() {
     echo "  help      Show this help message"
     echo ""
     echo "Prerequisites:"
-    echo "  .NET 9.0 SDK - https://dotnet.microsoft.com/download/dotnet/9.0"
+    echo "  .NET 10.0 SDK - https://dotnet.microsoft.com/download/dotnet/10.0"
     echo ""
     echo "Alternative (with nix):"
     echo "  nix develop     # Enter dev shell with all dependencies"

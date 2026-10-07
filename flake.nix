@@ -6,11 +6,11 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { nixpkgs, flake-utils, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        dotnet-sdk = pkgs.dotnet-sdk_9;
+        dotnet-sdk = pkgs.dotnet-sdk_10;
       in
       {
         devShells.default = pkgs.mkShell {
@@ -19,6 +19,7 @@
           packages = with pkgs; [
             dotnet-sdk
             dotnetPackages.Nuget
+            zip
           ];
 
           shellHook = ''
