@@ -50,7 +50,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Models
         public int? Bitrate { get; set; }
 
         [JsonIgnore]
-        public string EffectiveUrl => string.IsNullOrWhiteSpace(Url) ? RecordingUrl : Url;
+        public string EffectiveUrl => string.IsNullOrWhiteSpace(RecordingUrl) ? Url : RecordingUrl;
 
         [JsonIgnore]
         public string EffectiveFormat => string.IsNullOrWhiteSpace(Format) ? Folder : Format;

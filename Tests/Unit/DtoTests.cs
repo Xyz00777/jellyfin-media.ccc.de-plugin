@@ -542,5 +542,29 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         #endregion
+
+        [Fact]
+        public void RecordingDto_EffectiveUrl_prefers_the_playable_recording_url()
+        {
+            var dto = new RecordingDto
+            {
+                Url = "https://api.media.ccc.de/public/recordings/71930",
+                RecordingUrl = "https://cdn.media.ccc.de/events/camp2023/h264-hd/talk_hd.mp4"
+            };
+
+            Assert.Equal(dto.RecordingUrl, dto.EffectiveUrl);
+        }
+
+        [Fact]
+        public void RecordingDto_EffectiveUrl_falls_back_to_url_when_recording_url_missing()
+        {
+            var dto = new RecordingDto
+            {
+                Url = "https://api.media.ccc.de/public/recordings/1",
+                RecordingUrl = string.Empty
+            };
+
+            Assert.Equal(dto.Url, dto.EffectiveUrl);
+        }
     }
 }

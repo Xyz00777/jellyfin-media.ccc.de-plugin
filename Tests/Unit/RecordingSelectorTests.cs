@@ -582,5 +582,86 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         #endregion
+
+        private static Recording Sample(string language, string format, string mimeType, bool hq, int width, long size)
+        {
+            return new Recording
+            {
+                Language = language,
+                Format = format,
+                MimeType = mimeType,
+                HighQuality = hq,
+                Width = width,
+                Height = width == 1920 ? 1080 : 576,
+                FileSize = size,
+                Url = $"https://cdn.media.ccc.de/{language}-{format}"
+            };
+        }
+
+        [Fact]
+        public void SelectBestRecording_ignores_audio_only_and_subtitle_files()
+        {
+            // Mirrors a real media.ccc.de payload: subtitle and audio renditions arrive in
+            // the same list and some of them are flagged high quality.
+            var recordings = new List<Recording>
+            {
+                Sample("eng", "mp3", "audio/mpeg", true, 0, 10),
+                Sample("eng", "opus", "audio/opus", false, 0, 6),
+                Sample("eng", "", "application/x-subrip", true, 0, 1),
+                Sample("eng", "mp4", "video/mp4", true, 1920, 496)
+            };
+
+            var selected = new RecordingSelector().SelectBestRecording(recordings, null);
+
+            Assert.NotNull(selected);
+            Assert.Equal("video/mp4", selected!.MimeType);
+        }
+
+        [Fact]
+        public void SelectBestRecording_returns_null_when_only_non_video_files_exist()
+        {
+            var recordings = new List<Recording>
+            {
+                Sample("eng", "mp3", "audio/mpeg", true, 0, 10),
+                Sample("eng", "", "application/x-subrip", true, 0, 1)
+            };
+
+            Assert.Null(new RecordingSelector().SelectBestRecording(recordings, null));
+        }
+
+        [Fact]
+        public void SelectBestRecording_excludes_non_video_when_mime_type_is_missing()
+        {
+            var recordings = new List<Recording>
+            {
+                Sample("eng", "mp3", string.Empty, true, 0, 10),
+                Sample("eng", "mp4", string.Empty, true, 1920, 496)
+            };
+
+            var selected = new RecordingSelector().SelectBestRecording(recordings, null);
+
+            Assert.NotNull(selected);
+            Assert.Equal("mp4", selected!.Format);
+        }
+
+        [Fact]
+        public void SelectBestRecording_prefers_combined_language_recording()
+        {
+            // A .strm holds a single URL, so the combined file is the only rendition that
+            // lets Jellyfin expose more than one audio track.
+            var recordings = new List<Recording>
+            {
+                Sample("deu", "mp4", "video/mp4", true, 1920, 496),
+                Sample("eng", "mp4", "video/mp4", true, 1920, 500),
+                Sample("deu-eng", "mp4", "video/mp4", true, 1920, 500)
+            };
+
+            var selected = new RecordingSelector()
+                .SelectBestRecording(recordings, new RecordingPreferences());
+
+            Assert.NotNull(selected);
+            Assert.Equal("deu-eng", selected!.Language);
+        }
+
     }
 }

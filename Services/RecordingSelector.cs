@@ -7,7 +7,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 {
     /// <summary>
     /// Selects the best recording from available options based on user preferences.
-    /// Priority order: Language > Quality > Format > Resolution > File Size > Bitrate.
+    /// Priority order: video only &gt; Language &gt; multi-language &gt; MP4/H.264 &gt; Quality &gt; Format &gt; Resolution &gt; File Size &gt; Bitrate.
     /// </summary>
     public class RecordingSelector : IRecordingSelector
     {
@@ -21,7 +21,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             IEnumerable<Recording> recordings,
             RecordingPreferences? preferences)
         {
-            var recordingList = recordings.ToList();
+            var recordingList = recordings.Where(IsPlayableVideo).ToList();
             if (recordingList.Count == 0)
                 return null;
 
@@ -43,6 +43,39 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
             return candidates.FirstOrDefault() ??
                    GetBestFallback(recordingList, preferredLanguages);
+        }
+
+        /// <summary>
+        /// The API returns audio-only renditions (mp3/opus) and subtitle files (srt/vtt)
+        /// alongside the video files, and some of them are flagged high quality. Writing
+        /// any of those into a .strm produces an unplayable entry, so they are excluded
+        /// before ranking. A .strm holds a single URL, so a combined-language file is the
+        /// only way Jellyfin can offer an audio track choice.
+        /// </summary>
+        private static bool IsPlayableVideo(Recording recording)
+        {
+            if (!string.IsNullOrWhiteSpace(recording.MimeType))
+            {
+                return recording.MimeType.StartsWith("video/", StringComparison.OrdinalIgnoreCase);
+            }
+
+            var format = recording.Format ?? string.Empty;
+            return !format.Equals("mp3", StringComparison.OrdinalIgnoreCase)
+                && !format.Equals("opus", StringComparison.OrdinalIgnoreCase)
+                && !format.Equals("srt", StringComparison.OrdinalIgnoreCase)
+                && !format.Equals("vtt", StringComparison.OrdinalIgnoreCase)
+                && !format.Equals("ttml", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsMultiLanguage(Recording recording)
+        {
+            return !string.IsNullOrWhiteSpace(recording.Language)
+                && recording.Language.Contains('-', StringComparison.Ordinal);
+        }
+
+        private static bool IsMp4(Recording recording)
+        {
+            return recording.Format?.Equals("mp4", StringComparison.OrdinalIgnoreCase) == true;
         }
 
         private IEnumerable<Recording> FilterByLanguage(
@@ -100,7 +133,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private IEnumerable<Recording> OrderByQualityMetrics(IEnumerable<Recording> recordings)
         {
             return recordings
-                .OrderByDescending(r => r.Width ?? 0)
+                .OrderByDescending(r => IsMultiLanguage(r) ? 1 : 0)
+                .ThenByDescending(r => IsMp4(r) ? 1 : 0)
+                .ThenByDescending(r => r.Width ?? 0)
                 .ThenByDescending(r => r.FileSize ?? r.Size)
                 .ThenByDescending(r => r.Bitrate ?? 0);
         }
@@ -116,13 +151,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 candidates = FilterByLanguage(candidates, preferredLanguages);
             }
 
-            candidates = candidates
-                .OrderByDescending(r => r.HighQuality ?? false)
-                .ThenByDescending(r => r.Width ?? 0)
-                .ThenByDescending(r => r.FileSize ?? r.Size)
-                .ThenByDescending(r => r.Bitrate ?? 0);
-
-            return candidates.FirstOrDefault();
+            return OrderByQualityMetrics(candidates).FirstOrDefault();
         }
     }
 }
