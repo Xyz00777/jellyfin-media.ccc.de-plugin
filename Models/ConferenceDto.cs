@@ -33,7 +33,25 @@ namespace Jellyfin.Plugin.MediaCccDe.Models
         [JsonPropertyName("description")]
         public string? Description { get; set; }
 
+        [JsonPropertyName("logo_url")]
+        public string? LogoUrl { get; set; }
+
+        [JsonPropertyName("images")]
+        public List<ConferenceImageDto>? Images { get; set; }
+
         [JsonPropertyName("events")]
         public List<EventDto>? Events { get; set; }
+    }
+
+    public class ConferenceImageDto
+    {
+        [JsonPropertyName("type")]
+        public string? Type { get; set; }
+
+        [JsonPropertyName("url")]
+        public string? Url { get; set; }
+
+        [JsonPropertyName("mime_type")]
+        public string? MimeType { get; set; }
     }
 }

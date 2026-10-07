@@ -61,6 +61,20 @@ namespace Jellyfin.Plugin.MediaCccDe.Models
         public int ConferenceId { get; set; }
 
         /// <summary>
+        /// Poster/thumbnail image for the event.
+        /// Optional field.
+        /// </summary>
+        [JsonPropertyName("poster_url")]
+        public string? PosterUrl { get; set; }
+
+        /// <summary>
+        /// Thumbnail image for the event.
+        /// Optional field.
+        /// </summary>
+        [JsonPropertyName("thumb_url")]
+        public string? ThumbUrl { get; set; }
+
+        /// <summary>
         /// List of available recordings for this event.
         /// Optional field.
         /// </summary>

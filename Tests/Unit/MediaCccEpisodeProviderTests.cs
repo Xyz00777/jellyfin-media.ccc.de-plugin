@@ -9,8 +9,10 @@ using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Providers;
 using Jellyfin.Plugin.MediaCccDe.Services;
+using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
+using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
 using Moq;
 using Xunit;
@@ -20,736 +22,472 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
     public class MediaCccEpisodeProviderTests
     {
         private readonly Mock<IMediaCccApiClient> _mockApiClient;
-        private readonly Mock<IRecordingSelector> _mockRecordingSelector;
+        private readonly Mock<IHttpClientFactory> _mockHttpClientFactory;
+        private readonly ConferenceScheduleCache _scheduleCache;
         private readonly MediaCccEpisodeProvider _provider;
 
         public MediaCccEpisodeProviderTests()
         {
             _mockApiClient = new Mock<IMediaCccApiClient>();
-            _mockRecordingSelector = new Mock<IRecordingSelector>();
-            _provider = new MediaCccEpisodeProvider(_mockApiClient.Object, _mockRecordingSelector.Object);
+            _mockHttpClientFactory = new Mock<IHttpClientFactory>();
+            _scheduleCache = new ConferenceScheduleCache(_mockApiClient.Object);
+            _provider = new MediaCccEpisodeProvider(
+                _mockApiClient.Object,
+                _scheduleCache,
+                _mockHttpClientFactory.Object);
         }
 
-        #region GetMetadata Tests
+        private const string ArchiveRoot = "/data/archive";
 
-        [Fact]
-        public async Task GetMetadata_returns_EpisodeInfo_for_event()
+        private static EpisodeInfo InfoFor(string acronym, string seasonFolder, string slug)
         {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert
-            Assert.NotNull(result);
-            Assert.True(result.HasMetadata);
-            Assert.NotNull(result.Item);
-            Assert.IsType<Episode>(result.Item);
-        }
-
-        [Fact]
-        public async Task GetMetadata_maps_event_title_to_Name()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Title = "Opening Ceremony - 37C3";
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert
-            Assert.Equal("Opening Ceremony - 37C3", result.Item.Name);
-        }
-
-        [Fact]
-        public async Task GetMetadata_maps_event_description_to_Overview()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Description = "This is the opening ceremony of 37C3, featuring exciting announcements and talks.";
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert
-            Assert.Equal("This is the opening ceremony of 37C3, featuring exciting announcements and talks.", result.Item.Overview);
-        }
-
-        [Fact]
-        public async Task GetMetadata_maps_event_length_to_RunTimeTicks()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Length = 7200; // 2 hours in seconds
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert
-            // Length is in seconds, RunTimeTicks is in 100-nanosecond intervals
-            // 7200 seconds * 10,000,000 ticks/second = 72,000,000,000 ticks
-            Assert.Equal(7200L * 10000000L, result.Item.RunTimeTicks);
-        }
-
-        [Fact]
-        public async Task GetMetadata_fetches_poster_from_event_recordings()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            // Act
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert - Provider maps event metadata without selecting recording
-            Assert.NotNull(result.Item);
-        }
-
-        [Fact]
-        public async Task GetMetadata_sets_premiere_date_from_event_date()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Date = "2023-12-27";
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert
-            Assert.NotNull(result.Item.PremiereDate);
-            Assert.Equal(2023, result.Item.PremiereDate.Value.Year);
-            Assert.Equal(12, result.Item.PremiereDate.Value.Month);
-            Assert.Equal(27, result.Item.PremiereDate.Value.Day);
-        }
-
-        [Fact]
-        public async Task GetMetadata_sets_index_number_from_event_order()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Slug = "37c3-12746-opening_ceremony";
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert
-            // IndexNumber represents the episode number within a season
-            Assert.NotEqual(0, result.Item.IndexNumber);
-        }
-
-        [Fact]
-        public async Task GetMetadata_sets_parent_index_number_from_day_number()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Date = "2023-12-27";
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert
-            // ParentIndexNumber represents the season (day) number
-            Assert.NotNull(result.Item.ParentIndexNumber);
-            Assert.InRange(result.Item.ParentIndexNumber ?? 0, 1, 31);
-        }
-
-        [Fact]
-        public async Task GetMetadata_returns_null_for_unknown_event()
-        {
-            // Arrange
-            var unknownSlug = "unknown-event-12345";
-            var episodeInfo = new EpisodeInfo { Name = unknownSlug };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync((EventDto?)null);
-
-            // Act
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert
-            Assert.False(result.HasMetadata);
-            Assert.Null(result.Item);
-        }
-
-        [Fact]
-        public async Task GetMetadata_handles_missing_recordings_gracefully()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Recordings = new List<Recording>();
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            // Act
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert - Should not throw, should handle gracefully
-            Assert.NotNull(result);
-            Assert.True(result.HasMetadata);
-            Assert.NotNull(result.Item);
-        }
-
-        [Fact]
-        public async Task GetMetadata_selects_best_recording_for_poster()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Recordings = new List<Recording>
+            return new EpisodeInfo
             {
-                new() 
-                { 
-                    Id = 1, 
-                    Language = "de", 
-                    Format = "mp4", 
-                    HighQuality = false, 
-                    Width = 1280, 
-                    Height = 720,
-                    Url = "https://cdn.media.ccc.de/37c3/sd/37c3-12746-opening_ceremony_sd.mp4"
-                },
-                new() 
-                { 
-                    Id = 2, 
-                    Language = "en", 
-                    Format = "mp4", 
-                    HighQuality = true, 
-                    Width = 1920, 
-                    Height = 1080,
-                    Url = "https://cdn.media.ccc.de/37c3/hd/37c3-12746-opening_ceremony_hd.mp4"
-                },
-                new() 
-                { 
-                    Id = 3, 
-                    Language = "en", 
-                    Format = "webm", 
-                    HighQuality = true, 
-                    Width = 3840, 
-                    Height = 2160,
-                    Url = "https://cdn.media.ccc.de/37c3/4k/37c3-12746-opening_ceremony_4k.webm"
-                }
+                Name = slug,
+                Path = $"{ArchiveRoot}/{acronym}/{seasonFolder}/{slug}.strm"
             };
-            
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            // Act
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert - Provider maps event metadata; recording selection happens elsewhere
-            Assert.NotNull(result.Item);
         }
 
-        [Fact]
-        public async Task GetMetadata_handles_null_event_date()
+        private static EventDto Talk(string slug, string title, string date, string? poster = null)
         {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Date = null;
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert - Should not throw, should handle gracefully
-            Assert.NotNull(result);
-            Assert.True(result.HasMetadata);
-            Assert.Null(result.Item.PremiereDate);
-        }
-
-        [Fact]
-        public async Task GetMetadata_handles_null_event_description()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Description = null;
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert - Should not throw
-            Assert.NotNull(result);
-            Assert.True(result.HasMetadata);
-            Assert.Null(result.Item.Overview);
-        }
-
-        [Fact]
-        public async Task GetMetadata_converts_length_seconds_to_runtime_ticks_correctly()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Length = 3600; // 1 hour
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert
-            // 3600 seconds * 10,000,000 ticks/second = 36,000,000,000 ticks
-            Assert.Equal(3600L * 10000000L, result.Item.RunTimeTicks);
-        }
-
-        [Fact]
-        public async Task GetMetadata_handles_zero_length_event()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Length = 0;
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert - Should set runtime to 0 or not set it at all
-            Assert.NotNull(result);
-            Assert.True(result.HasMetadata);
-            Assert.Equal(0, result.Item.RunTimeTicks);
-        }
-
-        [Fact]
-        public async Task GetMetadata_handles_cancellation_token()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            var cts = new CancellationTokenSource();
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, cts.Token);
-            Assert.NotNull(result);
-        }
-
-        [Fact]
-        public async Task GetMetadata_preserves_event_guid_as_provider_id()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Guid = "abc123-def456-789xyz";
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert
-            Assert.NotNull(result.Item);
-            Assert.Equal(testEvent.Guid, result.Item.ProviderIds["MediaCccDe"]);
-        }
-
-        [Fact]
-        public async Task GetMetadata_handles_event_with_multiple_recordings()
-        {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Recordings = new List<Recording>
+            return new EventDto
             {
-                new() { Language = "de", Format = "mp4", HighQuality = true, Width = 1920, Height = 1080 },
-                new() { Language = "en", Format = "mp4", HighQuality = true, Width = 1920, Height = 1080 },
-                new() { Language = "en", Format = "webm", HighQuality = false, Width = 1280, Height = 720 },
-                new() { Language = "en", Format = "mp4", HighQuality = true, Width = 3840, Height = 2160 }
+                Guid = "guid-" + slug,
+                Slug = slug,
+                Title = title,
+                Date = date,
+                Length = 3600,
+                Description = "A talk about things.",
+                PosterUrl = poster
             };
-            
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            // Act
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert - Provider maps event metadata with recordings preserved in DTO
-            Assert.NotNull(result.Item);
         }
 
-        #endregion
+        private void GivenConference(string acronym, params EventDto[] events)
+        {
+            _mockApiClient
+                .Setup(x => x.GetConferenceAsync(acronym, It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ConferenceDto
+                {
+                    Acronym = acronym,
+                    Title = acronym.ToUpperInvariant(),
+                    LogoUrl = $"https://static.media.ccc.de/media/congress/2023/{acronym}.png",
+                    Events = events.ToList()
+                });
+        }
 
-        #region C3: GetMetadata uses ProviderIds for lookup (not Name)
+        #region Season = conference day
 
         [Fact]
-        public async Task GetMetadata_uses_provider_id_for_lookup_when_available()
+        public async Task First_conference_day_is_season_1()
         {
-            // Arrange - ProviderIds should be the primary lookup key, not Name
-            var eventGuid = "real-guid-123";
-            var talkTitle = "Opening Ceremony";
-            var testEvent = CreateTestEvent();
-            testEvent.Guid = eventGuid;
-            testEvent.Title = talkTitle;
-            var eventDto = CreateEventDto(testEvent);
+            GivenConference("37c3", Talk("a", "Opening", "2023-12-27T10:30:00+01:00"));
 
-            // EpisodeInfo has BOTH Name (talk title) and ProviderIds (guid)
-            var episodeInfo = new EpisodeInfo { Name = talkTitle };
-            episodeInfo.ProviderIds["MediaCccDe"] = eventGuid;
+            var result = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "a"), CancellationToken.None);
 
-            // API should be called with the GUID, not the title
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(eventGuid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            // Act
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert - API must be called with the GUID from ProviderIds
-            _mockApiClient.Verify(
-                x => x.GetEventAsync(eventGuid, It.IsAny<CancellationToken>()),
-                Times.Once);
-            _mockApiClient.Verify(
-                x => x.GetEventAsync(talkTitle, It.IsAny<CancellationToken>()),
-                Times.Never);
             Assert.True(result.HasMetadata);
-            Assert.Equal(eventGuid, result.Item.ProviderIds["MediaCccDe"]);
-        }
-
-        [Fact]
-        public async Task GetMetadata_falls_back_to_Name_when_no_provider_id()
-        {
-            // Arrange - When ProviderIds has no MediaCccDe entry, fall back to Name
-            var eventSlug = "37c3-12746-opening_ceremony";
-            var testEvent = CreateTestEvent();
-            testEvent.Guid = "some-guid";
-            var eventDto = CreateEventDto(testEvent);
-
-            var episodeInfo = new EpisodeInfo { Name = eventSlug };
-            // No ProviderIds set - should fall back to Name
-
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(eventSlug, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            // Act
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert - API called with Name as fallback
-            _mockApiClient.Verify(
-                x => x.GetEventAsync(eventSlug, It.IsAny<CancellationToken>()),
-                Times.Once);
-            Assert.True(result.HasMetadata);
-        }
-
-        #endregion
-
-        #region C4: DeriveIndexNumber is deterministic (stable across calls)
-
-        [Fact]
-        public async Task DeriveIndexNumber_is_stable_across_calls()
-        {
-            // Arrange - Same event must always produce the same IndexNumber.
-            // The old GetHashCode() approach was non-deterministic across restarts.
-            var testEvent = CreateTestEvent();
-            testEvent.Slug = "37c3-12746-opening_ceremony";
-            testEvent.Guid = "abc123-def456-789";
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            episodeInfo.ProviderIds["MediaCccDe"] = testEvent.Guid;
-
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            // Act - Call GetMetadata multiple times; IndexNumber must be identical
-            var result1 = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-            var result2 = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-            var result3 = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert
-            Assert.Equal(result1.Item.IndexNumber, result2.Item.IndexNumber);
-            Assert.Equal(result2.Item.IndexNumber, result3.Item.IndexNumber);
-        }
-
-        [Fact]
-        public async Task DeriveIndexNumber_is_not_zero()
-        {
-            // IndexNumber should always be a positive number (1-based)
-            var testEvent = CreateTestEvent();
-            testEvent.Slug = "37c3-12746-opening_ceremony";
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            episodeInfo.ProviderIds["MediaCccDe"] = testEvent.Guid;
-
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-            Assert.True(result.Item.IndexNumber > 0, "IndexNumber should be positive (1-based)");
-        }
-
-        #endregion
-
-        #region C5: DeriveParentIndexNumber works for non-December conferences
-
-        [Fact]
-        public async Task DeriveParentIndexNumber_works_for_july_conference()
-        {
-            // Arrange - MCH (MiniCamp Hamburg) takes place in July
-            var testEvent = CreateTestEvent();
-            testEvent.Date = "2024-07-05";
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            episodeInfo.ProviderIds["MediaCccDe"] = testEvent.Guid;
-
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            // Act
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert - ParentIndexNumber should be determined from the date,
-            // not hardcoded to December logic
-            Assert.NotNull(result.Item.ParentIndexNumber);
-            Assert.True(result.Item.ParentIndexNumber > 0,
-                "ParentIndexNumber should be positive for non-December conferences");
-        }
-
-        [Fact]
-        public async Task DeriveParentIndexNumber_works_for_march_conference()
-        {
-            // Arrange - GPN takes place in March
-            var testEvent = CreateTestEvent();
-            testEvent.Date = "2024-03-22";
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            episodeInfo.ProviderIds["MediaCccDe"] = testEvent.Guid;
-
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            // Act
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert
-            Assert.NotNull(result.Item.ParentIndexNumber);
-            Assert.True(result.Item.ParentIndexNumber > 0,
-                "ParentIndexNumber should be positive for March conferences");
-        }
-
-        [Fact]
-        public async Task DeriveParentIndexNumber_preserves_december_congress_day_number()
-        {
-            // Arrange - For CCC congresses starting Dec 27, day numbers should still work
-            var testEvent = CreateTestEvent();
-            testEvent.Date = "2023-12-27";
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            episodeInfo.ProviderIds["MediaCccDe"] = testEvent.Guid;
-
-            _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
-
-            // Act
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
-
-            // Assert - Dec 27 should be Day 1 (ParentIndexNumber = 1)
             Assert.Equal(1, result.Item.ParentIndexNumber);
         }
 
         [Fact]
-        public async Task DeriveParentIndexNumber_returns_null_for_null_date()
+        public async Task Fourth_conference_day_is_season_4()
         {
-            // Arrange
-            var testEvent = CreateTestEvent();
-            testEvent.Date = null;
-            var eventDto = CreateEventDto(testEvent);
-            var episodeInfo = new EpisodeInfo { Name = testEvent.Guid };
-            episodeInfo.ProviderIds["MediaCccDe"] = testEvent.Guid;
+            GivenConference(
+                "37c3",
+                Talk("a", "Opening", "2023-12-27T10:30:00+01:00"),
+                Talk("b", "Talk", "2023-12-30T10:30:00+01:00"));
 
+            var result = await _provider.GetMetadata(InfoFor("37c3", "Season 04", "b"), CancellationToken.None);
+
+            Assert.Equal(4, result.Item.ParentIndexNumber);
+        }
+
+        [Fact]
+        public async Task Season_is_relative_to_conference_start_not_day_of_month()
+        {
+            // A July conference: day-of-month math previously produced "Season 5" from the
+            // 5th and mis-numbered a five day camp as seasons 5..9.
+            GivenConference(
+                "camp2023",
+                Talk("a", "Day1", "2023-07-03T10:00:00+02:00"),
+                Talk("b", "Day2", "2023-07-04T10:00:00+02:00"),
+                Talk("c", "Day3", "2023-07-05T10:00:00+02:00"));
+
+            var result = await _provider.GetMetadata(InfoFor("camp2023", "Season 03", "c"), CancellationToken.None);
+
+            Assert.Equal(3, result.Item.ParentIndexNumber);
+        }
+
+        [Fact]
+        public async Task Season_spanning_month_boundary_is_contiguous()
+        {
+            // A three day conference running 30 Mar - 1 Apr must still be seasons 1..3.
+            GivenConference(
+                "gpn",
+                Talk("a", "Day1", "2024-03-30T10:00:00+01:00"),
+                Talk("b", "Day2", "2024-03-31T10:00:00+02:00"),
+                Talk("c", "Day3", "2024-04-01T10:00:00+02:00"));
+
+            Assert.Equal(1, (await _provider.GetMetadata(InfoFor("gpn", "Season 01", "a"), CancellationToken.None)).Item.ParentIndexNumber);
+            Assert.Equal(2, (await _provider.GetMetadata(InfoFor("gpn", "Season 02", "b"), CancellationToken.None)).Item.ParentIndexNumber);
+            Assert.Equal(3, (await _provider.GetMetadata(InfoFor("gpn", "Season 03", "c"), CancellationToken.None)).Item.ParentIndexNumber);
+        }
+
+        [Fact]
+        public async Task Season_follows_actual_days_not_a_contiguous_counter()
+        {
+            // A gap day must not be invented: if nothing happens on 31 Mar then 1 Apr is
+            // day 3. This matches the on-disk Season folders, which use the same offset.
+            GivenConference(
+                "gpn",
+                Talk("a", "Day1", "2024-03-29T10:00:00+01:00"),
+                Talk("b", "Day3", "2024-04-01T10:00:00+02:00"));
+
+            Assert.Equal(1, (await _provider.GetMetadata(InfoFor("gpn", "Season 01", "a"), CancellationToken.None)).Item.ParentIndexNumber);
+            Assert.Equal(4, (await _provider.GetMetadata(InfoFor("gpn", "Season 04", "b"), CancellationToken.None)).Item.ParentIndexNumber);
+        }
+
+        [Fact]
+        public async Task Season_is_null_when_conference_cannot_be_resolved()
+        {
+            // No path and no provider id: Jellyfin falls back to the folder name, which is
+            // already correct on disk.
             _mockApiClient
-                .Setup(x => x.GetEventAsync(testEvent.Guid, It.IsAny<CancellationToken>()))
-                .ReturnsAsync(eventDto);
+                .Setup(x => x.GetEventAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Talk("a", "Opening", "2023-12-27T10:30:00+01:00"));
 
-            // Act
-            var result = await _provider.GetMetadata(episodeInfo, CancellationToken.None);
+            var result = await _provider.GetMetadata(new EpisodeInfo { Name = "guid-a" }, CancellationToken.None);
 
-            // Assert
+            Assert.True(result.HasMetadata);
             Assert.Null(result.Item.ParentIndexNumber);
         }
 
         #endregion
 
-        #region GetSearchResults tests
+        #region Episode = running order within the day
 
         [Fact]
-        public async Task GetSearchResults_returns_result_when_provider_id_available()
+        public async Task Episode_numbers_follow_start_time_within_a_day()
         {
-            // Arrange
-            var searchInfo = new EpisodeInfo { Name = "Opening Ceremony" };
-            searchInfo.ProviderIds["MediaCccDe"] = "real-guid-123";
+            // Deliberately supplied out of order, and with a later slug sorting first.
+            GivenConference(
+                "37c3",
+                Talk("zzz_late", "Third", "2023-12-27T15:00:00+01:00"),
+                Talk("aaa_early", "First", "2023-12-27T10:00:00+01:00"),
+                Talk("mmm_mid", "Second", "2023-12-27T12:00:00+01:00"));
 
-            // Act
-            var results = await _provider.GetSearchResults(searchInfo, CancellationToken.None);
+            var first = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "aaa_early"), CancellationToken.None);
+            var second = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "mmm_mid"), CancellationToken.None);
+            var third = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "zzz_late"), CancellationToken.None);
 
-            // Assert
-            Assert.NotEmpty(results);
-            var resultList = results.ToList();
-            Assert.Single(resultList);
-            Assert.Equal("real-guid-123", resultList[0].ProviderIds["MediaCccDe"]);
+            Assert.Equal(1, first.Item.IndexNumber);
+            Assert.Equal(2, second.Item.IndexNumber);
+            Assert.Equal(3, third.Item.IndexNumber);
         }
 
         [Fact]
-        public async Task GetSearchResults_returns_empty_when_no_provider_id()
+        public async Task Episode_numbering_restarts_on_each_day()
         {
-            // Arrange
-            var searchInfo = new EpisodeInfo { Name = "Opening Ceremony" };
-            // No ProviderIds set
+            GivenConference(
+                "37c3",
+                Talk("d1a", "D1A", "2023-12-27T10:00:00+01:00"),
+                Talk("d1b", "D1B", "2023-12-27T12:00:00+01:00"),
+                Talk("d2a", "D2A", "2023-12-28T10:00:00+01:00"));
 
-            // Act
-            var results = await _provider.GetSearchResults(searchInfo, CancellationToken.None);
+            var day1a = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "d1a"), CancellationToken.None);
+            var day1b = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "d1b"), CancellationToken.None);
+            var day2a = await _provider.GetMetadata(InfoFor("37c3", "Season 02", "d2a"), CancellationToken.None);
 
-            // Assert
+            Assert.Equal(1, day1a.Item.IndexNumber);
+            Assert.Equal(2, day1b.Item.IndexNumber);
+            Assert.Equal(1, day2a.Item.IndexNumber);
+        }
+
+        [Fact]
+        public async Task Episode_numbers_are_stable_across_repeated_calls()
+        {
+            GivenConference(
+                "37c3",
+                Talk("a", "A", "2023-12-27T10:00:00+01:00"),
+                Talk("b", "B", "2023-12-27T11:00:00+01:00"));
+
+            var info = InfoFor("37c3", "Season 01", "b");
+
+            var r1 = await _provider.GetMetadata(info, CancellationToken.None);
+            var r2 = await _provider.GetMetadata(info, CancellationToken.None);
+            var r3 = await _provider.GetMetadata(info, CancellationToken.None);
+
+            Assert.Equal(r1.Item.IndexNumber, r2.Item.IndexNumber);
+            Assert.Equal(r2.Item.IndexNumber, r3.Item.IndexNumber);
+            Assert.Equal(2, r1.Item.IndexNumber);
+        }
+
+        [Fact]
+        public async Task Simultaneous_start_times_are_broken_deterministically()
+        {
+            // 37C3 runs parallel tracks, so identical start times are the normal case.
+            GivenConference(
+                "37c3",
+                Talk("bbb", "B", "2023-12-27T11:00:00+01:00"),
+                Talk("aaa", "A", "2023-12-27T11:00:00+01:00"));
+
+            var a = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "aaa"), CancellationToken.None);
+            var b = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "bbb"), CancellationToken.None);
+
+            Assert.Equal(1, a.Item.IndexNumber);
+            Assert.Equal(2, b.Item.IndexNumber);
+        }
+
+        [Fact]
+        public async Task Schedule_lookup_does_not_refetch_each_event()
+        {
+            GivenConference(
+                "37c3",
+                Talk("a", "A", "2023-12-27T10:00:00+01:00"),
+                Talk("b", "B", "2023-12-27T11:00:00+01:00"));
+
+            await _provider.GetMetadata(InfoFor("37c3", "Season 01", "a"), CancellationToken.None);
+            await _provider.GetMetadata(InfoFor("37c3", "Season 01", "b"), CancellationToken.None);
+
+            _mockApiClient.Verify(
+                x => x.GetConferenceAsync("37c3", It.IsAny<CancellationToken>()),
+                Times.Once);
+            _mockApiClient.Verify(
+                x => x.GetEventAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+                Times.Never);
+        }
+
+        #endregion
+
+        #region Identity and mapping
+
+        [Fact]
+        public async Task Provider_id_is_the_slug_not_the_guid()
+        {
+            GivenConference("37c3", Talk("37c3-12746-opening_ceremony", "Opening", "2023-12-27T10:00:00+01:00"));
+
+            var result = await _provider.GetMetadata(
+                InfoFor("37c3", "Season 01", "37c3-12746-opening_ceremony"),
+                CancellationToken.None);
+
+            Assert.Equal("37c3-12746-opening_ceremony", result.Item.ProviderIds["MediaCccDe"]);
+        }
+
+        [Fact]
+        public async Task Legacy_guid_provider_ids_still_resolve()
+        {
+            // Libraries created before the slug switch store the GUID as the provider id.
+            var talk = Talk("37c3-12746-opening_ceremony", "Opening Ceremony", "2023-12-27T10:00:00+01:00");
+            GivenConference("37c3", talk);
+
+            var info = InfoFor("37c3", "Season 01", "37c3-12746-opening_ceremony");
+            info.ProviderIds["MediaCccDe"] = talk.Guid;
+
+            var result = await _provider.GetMetadata(info, CancellationToken.None);
+
+            Assert.True(result.HasMetadata);
+            Assert.Equal("Opening Ceremony", result.Item.Name);
+            Assert.Equal(1, result.Item.IndexNumber);
+        }
+
+        [Fact]
+        public async Task Falls_back_to_event_lookup_when_schedule_misses()
+        {
+            _mockApiClient
+                .Setup(x => x.GetConferenceAsync("37c3", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ConferenceDto { Acronym = "37c3", Events = new List<EventDto>() });
+            _mockApiClient
+                .Setup(x => x.GetEventAsync("guid-x", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(Talk("x", "Direct Fetch", "2023-12-27T10:00:00+01:00"));
+
+            var info = InfoFor("37c3", "Season 01", "x");
+            info.ProviderIds["MediaCccDe"] = "guid-x";
+
+            var result = await _provider.GetMetadata(info, CancellationToken.None);
+
+            Assert.True(result.HasMetadata);
+            Assert.Equal("Direct Fetch", result.Item.Name);
+        }
+
+        [Fact]
+        public async Task Event_without_a_slug_is_not_mapped()
+        {
+            var info = new EpisodeInfo { Name = "guid-noslug", Path = $"{ArchiveRoot}/37c3/Season 01/x.strm" };
+            _mockApiClient
+                .Setup(x => x.GetConferenceAsync("37c3", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ConferenceDto { Acronym = "37c3", Events = new List<EventDto>() });
+            _mockApiClient
+                .Setup(x => x.GetEventAsync("guid-noslug", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new EventDto { Guid = "guid-noslug", Title = "No slug", Date = "2023-12-27T10:00:00+01:00" });
+
+            var result = await _provider.GetMetadata(info, CancellationToken.None);
+
+            Assert.False(result.HasMetadata);
+        }
+
+        [Fact]
+        public async Task Maps_title_length_and_premiere_date()
+        {
+            var talk = Talk("a", "Opening Ceremony", "2023-12-27T10:30:00+01:00");
+            talk.Length = 7200;
+            GivenConference("37c3", talk);
+
+            var result = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "a"), CancellationToken.None);
+
+            Assert.Equal("Opening Ceremony", result.Item.Name);
+            Assert.Equal(7200L * 10_000_000L, result.Item.RunTimeTicks);
+            Assert.NotNull(result.Item.PremiereDate);
+            Assert.Equal(2023, result.Item.PremiereDate!.Value.Year);
+            Assert.Equal(12, result.Item.PremiereDate.Value.Month);
+            Assert.Equal(27, result.Item.PremiereDate.Value.Day);
+        }
+
+        [Fact]
+        public async Task Unknown_event_reports_no_metadata()
+        {
+            _mockApiClient
+                .Setup(x => x.GetConferenceAsync("37c3", It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ConferenceDto { Acronym = "37c3", Events = new List<EventDto>() });
+            _mockApiClient
+                .Setup(x => x.GetEventAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((EventDto?)null);
+
+            var result = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "nope"), CancellationToken.None);
+
+            Assert.False(result.HasMetadata);
+            Assert.Null(result.Item);
+        }
+
+        #endregion
+
+        #region Overview truncation
+
+        [Fact]
+        public async Task Overview_is_truncated_to_four_lines()
+        {
+            var talk = Talk("a", "Long", "2023-12-27T10:00:00+01:00");
+            talk.Description = string.Join(" ", Enumerable.Range(0, 400).Select(i => "word" + i));
+            GivenConference("37c3", talk);
+
+            var result = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "a"), CancellationToken.None);
+
+            var lines = result.Item.Overview!.Split('\n');
+            Assert.Equal(4, lines.Length);
+        }
+
+        [Fact]
+        public async Task Overview_strips_html_and_entities()
+        {
+            var talk = Talk("a", "Html", "2023-12-27T10:00:00+01:00");
+            talk.Description = "<p>Talk about <b>bins</b> &amp; things</p>";
+            GivenConference("37c3", talk);
+
+            var result = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "a"), CancellationToken.None);
+
+            Assert.Equal("Talk about bins & things", result.Item.Overview);
+        }
+
+        [Fact]
+        public async Task Short_overview_is_left_intact()
+        {
+            var talk = Talk("a", "Short", "2023-12-27T10:00:00+01:00");
+            talk.Description = "Just one line.";
+            GivenConference("37c3", talk);
+
+            var result = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "a"), CancellationToken.None);
+
+            Assert.Equal("Just one line.", result.Item.Overview);
+        }
+
+        [Fact]
+        public async Task Null_overview_stays_null()
+        {
+            var talk = Talk("a", "None", "2023-12-27T10:00:00+01:00");
+            talk.Description = null;
+            GivenConference("37c3", talk);
+
+            var result = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "a"), CancellationToken.None);
+
+            Assert.Null(result.Item.Overview);
+        }
+
+        #endregion
+
+        #region Artwork
+
+        [Fact]
+        public async Task Poster_is_offered_as_a_remote_image()
+        {
+            var poster = "https://static.media.ccc.de/media/congress/2023/1234-abc_preview.jpg";
+            GivenConference("37c3", Talk("a", "Poster", "2023-12-27T10:00:00+01:00", poster));
+
+            var result = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "a"), CancellationToken.None);
+
+            var image = Assert.Single(result.RemoteImages);
+            Assert.Equal(poster, image.Url);
+            Assert.Equal(ImageType.Primary, image.Type);
+        }
+
+        [Fact]
+        public async Task No_poster_means_no_remote_images()
+        {
+            GivenConference("37c3", Talk("a", "NoPoster", "2023-12-27T10:00:00+01:00"));
+
+            var result = await _provider.GetMetadata(InfoFor("37c3", "Season 01", "a"), CancellationToken.None);
+
+            Assert.Empty(result.RemoteImages);
+        }
+
+        [Fact]
+        public void Provider_supports_episode_images_only()
+        {
+            Assert.True(_provider.Supports(new Episode()));
+            Assert.False(_provider.Supports(new Series()));
+            Assert.Contains(ImageType.Primary, _provider.SupportedImageTypes);
+        }
+
+        #endregion
+
+        #region Search
+
+        [Fact]
+        public async Task GetSearchResults_echoes_a_known_provider_id()
+        {
+            var info = new EpisodeInfo { Name = "Opening" };
+            info.ProviderIds["MediaCccDe"] = "37c3-12746-opening_ceremony";
+
+            var results = (await _provider.GetSearchResults(info, CancellationToken.None)).ToList();
+
+            Assert.Single(results);
+            Assert.Equal("37c3-12746-opening_ceremony", results[0].ProviderIds["MediaCccDe"]);
+        }
+
+        [Fact]
+        public async Task GetSearchResults_is_empty_without_a_provider_id()
+        {
+            var results = await _provider.GetSearchResults(new EpisodeInfo { Name = "Opening" }, CancellationToken.None);
+
             Assert.Empty(results);
         }
 
         #endregion
 
-        #region GetImageResponse tests
+        #region Acronym resolution from the archive layout
 
-        [Fact]
-        public async Task GetImageResponse_returns_404_not_found()
+        [Theory]
+        [InlineData("/data/archive/37C3/Season 04/talk.strm", "37C3")]
+        [InlineData("/data/archive/37C3/Season 1/talk.strm", "37C3")]
+        [InlineData("/data/archive/camp2023/Season 02/talk.strm", "camp2023")]
+        public void Resolves_acronym_from_archive_path(string path, string expected)
         {
-            // Act
-            var response = await _provider.GetImageResponse("https://example.com/image.jpg", CancellationToken.None);
-
-            // Assert - Should return 404, not throw NotImplementedException
-            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+            Assert.Equal(expected, MediaCccEpisodeProvider.ResolveConferenceAcronym(path));
         }
 
-        #endregion
-
-        #region Helper Methods
-
-        private static Event CreateTestEvent()
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        public void Acronym_is_null_for_a_missing_path(string? path)
         {
-            return new Event
-            {
-                Guid = "abc123-def456-789",
-                Title = "Opening Ceremony",
-                Slug = "37c3-12746-opening_ceremony",
-                Description = "The opening ceremony of 37C3",
-                Date = "2023-12-27",
-                Length = 7200,
-                ConferenceId = 123,
-                Recordings = new List<Recording>
-                {
-                    new()
-                    {
-                        Id = 1,
-                        Language = "en",
-                        Format = "mp4",
-                        HighQuality = true,
-                        Url = "https://cdn.media.ccc.de/37c3/h264-hd/37c3-12746-opening_ceremony.mp4",
-                        Width = 1920,
-                        Height = 1080,
-                        Size = 2048000000L,
-                        MimeType = "video/mp4"
-                    }
-                }
-            };
-        }
-
-        private static EventDto CreateEventDto(Event eventModel)
-        {
-            return new EventDto
-            {
-                Guid = eventModel.Guid,
-                Title = eventModel.Title,
-                Slug = eventModel.Slug,
-                Description = eventModel.Description,
-                Date = eventModel.Date,
-                Length = eventModel.Length,
-                ConferenceId = eventModel.ConferenceId,
-                Link = eventModel.Link,
-                Recordings = eventModel.Recordings?.Select(r => new RecordingDto
-                {
-                    Id = r.Id,
-                    Language = r.Language,
-                    Format = r.Format ?? string.Empty,
-                    HighQuality = r.HighQuality ?? false,
-                    Width = r.Width ?? 0,
-                    Height = r.Height ?? 0,
-                    Size = r.Size,
-                    Url = r.Url,
-                    MimeType = r.MimeType,
-                    Length = r.Length,
-                    FileSize = r.FileSize,
-                    Bitrate = r.Bitrate
-                }).ToList()
-            };
+            Assert.Null(MediaCccEpisodeProvider.ResolveConferenceAcronym(path));
         }
 
         #endregion

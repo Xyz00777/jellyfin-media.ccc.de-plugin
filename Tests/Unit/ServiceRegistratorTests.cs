@@ -3,6 +3,7 @@ using System.Linq;
 using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Services;
 using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Plugins;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using Microsoft.Extensions.DependencyInjection;
@@ -198,6 +199,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
             serviceCollection.AddSingleton(appPathsMock.Object);
+            serviceCollection.AddSingleton(new Mock<IPluginManager>().Object);
             serviceCollection.AddLogging();
 
             var provider = serviceCollection.BuildServiceProvider();
@@ -205,6 +207,42 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             Assert.NotNull(strmGenerator);
             Assert.IsType<StrmGenerator>(strmGenerator);
+        }
+
+        [Fact]
+        public void ServiceRegistrator_configuration_provider_falls_back_to_defaults_without_a_loaded_plugin()
+        {
+            var serviceCollection = new ServiceCollection();
+            var applicationHostMock = new Mock<IServerApplicationHost>();
+            var appPathsMock = new Mock<IApplicationPaths>();
+            appPathsMock.Setup(x => x.PluginConfigurationsPath).Returns("/test/config");
+            var registrator = new ServiceRegistrator();
+
+            registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
+            serviceCollection.AddSingleton(appPathsMock.Object);
+            serviceCollection.AddSingleton(new Mock<IPluginManager>().Object);
+            serviceCollection.AddLogging();
+
+            var provider = serviceCollection.BuildServiceProvider();
+            var configurationProvider = provider.GetRequiredService<Func<PluginConfiguration>>();
+
+            var configuration = configurationProvider();
+
+            Assert.NotNull(configuration);
+            Assert.Equal("hd", configuration.PreferredQuality);
+        }
+
+        [Fact]
+        public void ServiceRegistrator_registers_the_conference_schedule_cache()
+        {
+            var serviceCollection = new ServiceCollection();
+            var registrator = new ServiceRegistrator();
+
+            registrator.RegisterServices(serviceCollection, new Mock<IServerApplicationHost>().Object);
+
+            var descriptor = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(IConferenceScheduleCache));
+            Assert.NotNull(descriptor);
+            Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
         }
     }
 }

@@ -17,6 +17,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Api
         Task<IReadOnlyList<ConferenceDto>> GetConferencesAsync(CancellationToken cancellationToken = default);
         Task<EventDto[]> GetEventsAsync(int conferenceId, CancellationToken cancellationToken = default);
         Task<EventDto[]> GetEventsAsync(string conferenceIdentifier, CancellationToken cancellationToken = default);
+        Task<ConferenceDto?> GetConferenceAsync(string conferenceIdentifier, CancellationToken cancellationToken = default);
         Task<EventDto?> GetEventAsync(string guid, CancellationToken cancellationToken = default);
         Task<EventDto[]> GetRecentAsync(int? limit = null, CancellationToken cancellationToken = default);
         string BuildUrl(string endpoint);
@@ -128,6 +129,20 @@ namespace Jellyfin.Plugin.MediaCccDe.Api
             });
 
             return await Task.WhenAll(hydratedEvents).ConfigureAwait(false);
+        }
+
+        public async Task<ConferenceDto?> GetConferenceAsync(string conferenceIdentifier, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(conferenceIdentifier))
+            {
+                throw new ArgumentException("Conference identifier cannot be empty", nameof(conferenceIdentifier));
+            }
+
+            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+            return await GetAsyncInternal<ConferenceDto>(
+                httpClient,
+                $"conferences/{Uri.EscapeDataString(conferenceIdentifier)}",
+                cancellationToken).ConfigureAwait(false);
         }
 
         public async Task<EventDto?> GetEventAsync(string guid, CancellationToken cancellationToken = default)

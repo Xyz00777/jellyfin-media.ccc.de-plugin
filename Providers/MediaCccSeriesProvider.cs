@@ -7,14 +7,16 @@ using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Services;
+using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
+using MediaBrowser.Model.Drawing;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Providers;
 
 namespace Jellyfin.Plugin.MediaCccDe.Providers
 {
-    public class MediaCccSeriesProvider : IRemoteMetadataProvider<Series, SeriesInfo>
+    public class MediaCccSeriesProvider : IRemoteMetadataProvider<Series, SeriesInfo>, IImageProvider
     {
         private readonly IMediaCccApiClient _apiClient;
         private readonly IHttpClientFactory _httpClientFactory;
@@ -64,6 +66,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
                 };
 
                 series.Genres = new[] { "Conference" };
+
+                var logoUrl = ResolveLogoUrl(matchingConference);
+                if (!string.IsNullOrWhiteSpace(logoUrl))
+                {
+                    result.RemoteImages = new List<(string, ImageType)> { (logoUrl, ImageType.Primary) };
+                }
 
                 result.HasMetadata = true;
                 result.Item = series;
@@ -115,11 +123,30 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
             return results;
         }
 
+        public bool Supports(BaseItem item)
+        {
+            return item is Series;
+        }
+
+        public IEnumerable<ImageType> SupportedImageTypes => new[] { ImageType.Primary };
+
         public async Task<HttpResponseMessage> GetImageResponse(string url, CancellationToken cancellationToken)
         {
             var httpClient = _httpClientFactory.CreateClient();
             await RemoteUrlValidator.ValidatePublicHttpsUrlAsync(url, cancellationToken).ConfigureAwait(false);
             return await httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
+        }
+
+        private static string? ResolveLogoUrl(ConferenceDto conference)
+        {
+            if (!string.IsNullOrWhiteSpace(conference.LogoUrl))
+            {
+                return conference.LogoUrl;
+            }
+
+            return conference.Images?
+                .FirstOrDefault(i => string.Equals(i.Type, "logo", StringComparison.OrdinalIgnoreCase))?
+                .Url;
         }
 
         private async Task<IReadOnlyList<ConferenceDto>> GetConferencesWithCacheAsync(CancellationToken cancellationToken)
