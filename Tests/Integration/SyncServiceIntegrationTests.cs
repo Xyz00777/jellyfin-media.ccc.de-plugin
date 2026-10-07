@@ -703,6 +703,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
             return new StrmGenerator(
                 _apiClientMock.Object,
                 recordingSelectorMock.Object,
+                new Mock<IHttpClientFactory>().Object,
                 _testArchivePath);
         }
 

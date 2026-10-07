@@ -35,6 +35,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Configuration\**\*.html" />
     <EmbeddedResource Include="Pages\**\*.html" />
+    <EmbeddedResource Include="Pages\**\*.js" />
   </ItemGroup>
 
 </Project>

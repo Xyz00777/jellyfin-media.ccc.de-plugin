@@ -10,5 +10,6 @@ namespace Jellyfin.Plugin.MediaCccDe
         public List<string> PreferredAudioLanguages { get; set; } = new List<string>();
         public List<string> PreferredSubtitleLanguages { get; set; } = new List<string>();
         public int SyncIntervalHours { get; set; } = 6;
+        public bool DownloadSubtitles { get; set; }
     }
 }

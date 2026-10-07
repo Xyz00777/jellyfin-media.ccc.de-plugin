@@ -11,19 +11,24 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 {
     public class StrmGenerator : IStrmGenerator
     {
+        private const string SubtitleMimeType = "application/x-subrip";
+
         private readonly IMediaCccApiClient _apiClient;
         private readonly IRecordingSelector _recordingSelector;
+        private readonly IHttpClientFactory _httpClientFactory;
         private readonly string _archivePath;
         private readonly Func<PluginConfiguration>? _configurationProvider;
 
         public StrmGenerator(
             IMediaCccApiClient apiClient,
             IRecordingSelector recordingSelector,
+            IHttpClientFactory httpClientFactory,
             string archivePath,
             Func<PluginConfiguration>? configurationProvider = null)
         {
             _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
             _recordingSelector = recordingSelector ?? throw new ArgumentNullException(nameof(recordingSelector));
+            _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
             _archivePath = archivePath ?? throw new ArgumentNullException(nameof(archivePath));
             _configurationProvider = configurationProvider;
         }
@@ -67,6 +72,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 Directory.CreateDirectory(directory);
             }
 
+            if (configuration is { DownloadSubtitles: true })
+            {
+                await DownloadSubtitleSidecarAsync(evt, filePath, configuration, cancellationToken).ConfigureAwait(false);
+            }
+
             if (!File.Exists(filePath) || !string.Equals(await File.ReadAllTextAsync(filePath, cancellationToken).ConfigureAwait(false), recording.Url, StringComparison.Ordinal))
             {
                 // Write to a sibling temp file and move into place, so an interrupted
@@ -101,6 +111,63 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 ConferenceAcronym = conference.Acronym,
                 EventSlug = evt.Slug
             };
+        }
+
+        /// <summary>
+        /// Jellyfin only discovers subtitles that sit on local disk beside the media file,
+        /// so an enabled setting means fetching the sidecar once and leaving it there.
+        /// </summary>
+        private async Task DownloadSubtitleSidecarAsync(
+            Event evt,
+            string strmPath,
+            PluginConfiguration configuration,
+            CancellationToken cancellationToken)
+        {
+            var subtitle = SelectSubtitle(evt.Recordings, configuration.PreferredSubtitleLanguages);
+            if (subtitle == null || string.IsNullOrWhiteSpace(subtitle.Url))
+            {
+                return;
+            }
+
+            var sidecarPath = Path.ChangeExtension(strmPath, ".srt");
+            if (File.Exists(sidecarPath) && new FileInfo(sidecarPath).Length > 0)
+            {
+                return;
+            }
+
+            await RemoteUrlValidator.ValidatePublicHttpsUrlAsync(subtitle.Url, cancellationToken).ConfigureAwait(false);
+
+            var httpClient = _httpClientFactory.CreateClient();
+            using var response = await httpClient.GetAsync(subtitle.Url, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+
+            await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            await using var target = File.Create(sidecarPath);
+            await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
+        }
+
+        internal static Recording? SelectSubtitle(IReadOnlyCollection<Recording> recordings, IReadOnlyList<string> preferredLanguages)
+        {
+            var candidates = recordings
+                .Where(r => string.Equals(r.MimeType, SubtitleMimeType, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (candidates.Count == 0)
+            {
+                return null;
+            }
+
+            foreach (var language in preferredLanguages)
+            {
+                var match = candidates.FirstOrDefault(r =>
+                    string.Equals(r.Language, language, StringComparison.OrdinalIgnoreCase));
+                if (match != null)
+                {
+                    return match;
+                }
+            }
+
+            return candidates[0];
         }
 
         public async Task<List<StrmResult>> GenerateSeriesStrmTreeAsync(CancellationToken cancellationToken)

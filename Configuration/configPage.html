@@ -67,6 +67,19 @@
                                 Comma-separated ISO 639-1 language codes. Falls back to first available subtitle language if no match.
                             </div>
                         </div>
+
+                        <div class="inputContainer">
+                            <label class="checkboxContainer" for="DownloadSubtitles">
+                                <input is="emby-checkbox" type="checkbox" id="DownloadSubtitles" name="DownloadSubtitles" />
+                                <span>Download subtitles</span>
+                            </label>
+                            <div class="fieldDescription">
+                                Fetch each talk's subtitle file next to its .strm so Jellyfin can offer it.
+                                Off by default: subtitles add one file and one download per talk, and only apply to
+                                .strm entries. On Jellyfin 12 the dashboard does not run plugin page scripts, so set
+                                this through the plugin API or the configuration XML file instead.
+                            </div>
+                        </div>
                     </div>
 
                     <div>
@@ -100,6 +113,8 @@
                         var subtitleLangs = config.PreferredSubtitleLanguages || [];
                         document.querySelector('#PreferredSubtitleLanguages').value = Array.isArray(subtitleLangs) ? subtitleLangs.join(', ') : '';
 
+                        document.querySelector('#DownloadSubtitles').checked = config.DownloadSubtitles === true;
+
                         Dashboard.hideLoadingMsg();
                     }).catch(function (error) {
                         Dashboard.hideLoadingMsg();
@@ -122,6 +137,8 @@
                         config.PreferredAudioLanguages = audioInput
                             ? audioInput.split(',').map(function (lang) { return lang.trim(); }).filter(function (lang) { return lang.length > 0; })
                             : [];
+
+                        config.DownloadSubtitles = document.querySelector('#DownloadSubtitles').checked === true;
 
                         var subtitleInput = document.querySelector('#PreferredSubtitleLanguages').value.trim();
                         config.PreferredSubtitleLanguages = subtitleInput

@@ -26,6 +26,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             _strmGenerator = new StrmGenerator(
                 _apiClientMock.Object,
                 _recordingSelectorMock.Object,
+                new Mock<IHttpClientFactory>().Object,
                 _testArchivePath);
         }
 
@@ -621,6 +622,80 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 HighQuality = width >= 1920,
                 Format = "mp4"
             };
+        }
+
+        #endregion
+
+        #region Subtitle selection
+
+        private static Recording Subtitle(string language, string url)
+        {
+            return new Recording
+            {
+                Language = language,
+                MimeType = "application/x-subrip",
+                Url = url,
+                Format = string.Empty
+            };
+        }
+
+        private static Recording Video(string language, string mimeType = "video/mp4")
+        {
+            return new Recording
+            {
+                Language = language,
+                MimeType = mimeType,
+                Url = "https://cdn.media.ccc.de/congress/2023/talk.mp4",
+                Format = "mp4"
+            };
+        }
+
+        [Fact]
+        public void SelectSubtitle_returns_null_when_no_subtitle_exists()
+        {
+            var recordings = new List<Recording> { Video("eng"), Video("deu", "audio/opus") };
+
+            Assert.Null(StrmGenerator.SelectSubtitle(recordings, new List<string>()));
+        }
+
+        [Fact]
+        public void SelectSubtitle_never_picks_a_video_or_audio_track()
+        {
+            var recordings = new List<Recording> { Video("eng"), Video("deu", "audio/opus") };
+
+            Assert.Null(StrmGenerator.SelectSubtitle(recordings, new List<string> { "eng" }));
+        }
+
+        [Fact]
+        public void SelectSubtitle_honours_the_preferred_language_order()
+        {
+            var recordings = new List<Recording>
+            {
+                Subtitle("eng", "https://cdn.media.ccc.de/en.srt"),
+                Subtitle("deu", "https://cdn.media.ccc.de/de.srt")
+            };
+
+            var selected = StrmGenerator.SelectSubtitle(recordings, new List<string> { "deu", "eng" });
+
+            Assert.NotNull(selected);
+            Assert.Equal("deu", selected!.Language);
+        }
+
+        [Fact]
+        public void SelectSubtitle_falls_back_when_no_preference_matches()
+        {
+            var recordings = new List<Recording> { Subtitle("eng", "https://cdn.media.ccc.de/en.srt") };
+
+            var selected = StrmGenerator.SelectSubtitle(recordings, new List<string> { "fra" });
+
+            Assert.NotNull(selected);
+            Assert.Equal("eng", selected!.Language);
+        }
+
+        [Fact]
+        public void DownloadSubtitles_defaults_to_off()
+        {
+            Assert.False(new PluginConfiguration().DownloadSubtitles);
         }
 
         #endregion
