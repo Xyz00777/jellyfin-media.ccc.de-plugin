@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Models;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Plugins;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -21,6 +22,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private readonly IMediaCccApiClient _apiClient;
         private readonly IStrmGenerator _strmGenerator;
         private readonly ISyncLogger _syncLogger;
+        private readonly ILibraryManager? _libraryManager;
         private readonly Func<PluginConfiguration> _configurationProvider;
         private readonly ILogger<SyncService> _logger;
         private readonly CancellationTokenSource _cts = new CancellationTokenSource();
@@ -34,6 +36,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             ISyncLogger syncLogger,
             Func<PluginConfiguration> configurationProvider,
             ILogger<SyncService> logger,
+            ILibraryManager? libraryManager = null,
             TimeSpan? configRecheckInterval = null)
         {
             _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
@@ -41,6 +44,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             _syncLogger = syncLogger ?? throw new ArgumentNullException(nameof(syncLogger));
             _configurationProvider = configurationProvider ?? throw new ArgumentNullException(nameof(configurationProvider));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _libraryManager = libraryManager;
             _configRecheckInterval = configRecheckInterval ?? ConfigRecheckInterval;
         }
 
@@ -221,8 +225,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 }
 
                 _logger.LogInformation("Conference sync completed. Processed: {Processed}, Created: {Created}", processedCount, createdCount);
-                
+
                 await _syncLogger.LogSyncCompletion(processedCount, createdCount, syncTimestamp).ConfigureAwait(false);
+
+                if (createdCount > 0 && _libraryManager != null)
+                {
+                    // Jellyfin only indexes files that exist when it scans, so without this
+                    // newly generated .strm files stay invisible until the next scheduled
+                    // scan or a manual refresh.
+                    _libraryManager.QueueLibraryScan();
+                }
             }
             catch (HttpRequestException ex)
             {

@@ -221,7 +221,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
         private readonly SemaphoreSlim _persistLock = new SemaphoreSlim(1, 1);
 
-        private async Task PersistAsync()
+        internal async Task PersistAsync(Func<Task>? afterSnapshot = null)
         {
             await _persistLock.WaitAsync().ConfigureAwait(false);
             try
@@ -232,6 +232,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 {
                     filePath = GetFilePath();
                     snapshot = _queue.Values.ToList();
+                }
+
+                if (afterSnapshot != null)
+                {
+                    await afterSnapshot().ConfigureAwait(false);
                 }
 
                 var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions

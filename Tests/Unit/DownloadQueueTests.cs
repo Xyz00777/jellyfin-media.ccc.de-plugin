@@ -435,6 +435,40 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
+        public async Task PersistAsync_serializes_snapshot_and_write_together()
+        {
+            await _queue.EnqueueAsync(CreateTestItem(eventGuid: "first"));
+
+            // Hold the first writer right after it snapshots, add another item
+            // underneath it, then let it finish. The writer must publish the newer
+            // state rather than the snapshot it captured beforehand.
+            var snapshotTaken = new TaskCompletionSource();
+            var release = new TaskCompletionSource();
+
+            var firstPersist = _queue.PersistAsync(async () =>
+            {
+                snapshotTaken.SetResult();
+                await release.Task;
+            });
+
+            await snapshotTaken.Task;
+            var mutation = _queue.EnqueueAsync(CreateTestItem(eventGuid: "second"));
+            await Task.Delay(200);
+            release.SetResult();
+            await Task.WhenAll(firstPersist, mutation);
+
+            var filePath = Path.Combine(
+                _testDataPath,
+                "plugins",
+                "ccc-media",
+                "data",
+                "download-queue.json");
+            var persisted = await File.ReadAllTextAsync(filePath);
+            Assert.Contains("first", persisted, StringComparison.Ordinal);
+            Assert.Contains("second", persisted, StringComparison.Ordinal);
+        }
+
+        [Fact]
         public async Task GetUserQueueAsync_returns_snapshots_not_live_items()
         {
             var item = CreateTestItem();

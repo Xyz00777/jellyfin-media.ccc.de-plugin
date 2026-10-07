@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Services;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Plugins;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -757,7 +759,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 "Expected error log to include retry/backoff info");
         }
 
-        private SyncService CreateService(TimeSpan? configRecheckInterval = null)
+        private SyncService CreateService(
+            TimeSpan? configRecheckInterval = null,
+            ILibraryManager? libraryManager = null)
         {
             return new SyncService(
                 _apiClientMock.Object,
@@ -765,7 +769,59 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 _syncLoggerMock.Object,
                 () => _configuration,
                 _loggerMock.Object,
+                libraryManager,
                 configRecheckInterval);
+        }
+
+        [Fact]
+        public async Task Sync_queues_a_library_scan_when_files_were_created()
+        {
+            var libraryManagerMock = new Mock<ILibraryManager>(MockBehavior.Loose);
+            _apiClientMock
+                .Setup(a => a.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<ConferenceDto>
+                {
+                    new ConferenceDto { Acronym = "37c3", Title = "37C3" }
+                });
+            _strmGeneratorMock
+                .Setup(s => s.CreateStrmFilesForConference(It.IsAny<ConferenceDto>(), It.IsAny<CancellationToken>()))
+                .Returns(Task.FromResult(true));
+
+            var service = CreateService(TimeSpan.FromHours(6), libraryManagerMock.Object);
+            await service.StartAsync(CancellationToken.None);
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (DateTime.UtcNow < deadline
+                && !libraryManagerMock.Invocations.Any(i => i.Method.Name == nameof(ILibraryManager.QueueLibraryScan)))
+            {
+                await Task.Delay(50);
+            }
+
+            await service.StopAsync(CancellationToken.None);
+
+            libraryManagerMock.Verify(m => m.QueueLibraryScan(), Times.Once);
+        }
+
+        [Fact]
+        public async Task Sync_does_not_queue_a_scan_when_nothing_changed()
+        {
+            var libraryManagerMock = new Mock<ILibraryManager>(MockBehavior.Loose);
+            _apiClientMock
+                .Setup(a => a.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<ConferenceDto>());
+
+            var service = CreateService(TimeSpan.FromHours(6), libraryManagerMock.Object);
+            await service.StartAsync(CancellationToken.None);
+
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            while (DateTime.UtcNow < deadline
+                && _syncLoggerMock.Invocations.Count == 0)
+            {
+                await Task.Delay(50);
+            }
+
+            await service.StopAsync(CancellationToken.None);
+
+            libraryManagerMock.Verify(m => m.QueueLibraryScan(), Times.Never);
         }
 
         [Fact]
