@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Models;
+using Jellyfin.Plugin.MediaCccDe.Services;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Entities;
@@ -114,10 +115,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
             return results;
         }
 
-        public Task<HttpResponseMessage> GetImageResponse(string url, CancellationToken cancellationToken)
+        public async Task<HttpResponseMessage> GetImageResponse(string url, CancellationToken cancellationToken)
         {
             var httpClient = _httpClientFactory.CreateClient();
-            return httpClient.GetAsync(url, cancellationToken);
+            await RemoteUrlValidator.ValidatePublicHttpsUrlAsync(url, cancellationToken).ConfigureAwait(false);
+            return await httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
         }
 
         private async Task<IReadOnlyList<ConferenceDto>> GetConferencesWithCacheAsync(CancellationToken cancellationToken)

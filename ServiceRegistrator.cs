@@ -6,6 +6,7 @@ using Jellyfin.Plugin.MediaCccDe.Services;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Jellyfin.Plugin.MediaCccDe;
@@ -21,6 +22,9 @@ public class ServiceRegistrator : IPluginServiceRegistrator
             client.BaseAddress = new Uri("https://api.media.ccc.de/public/");
             client.Timeout = TimeSpan.FromSeconds(30);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AllowAutoRedirect = false
         });
         
         serviceCollection.AddSingleton<IMediaCccApiClient, MediaCccApi>();

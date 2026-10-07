@@ -57,7 +57,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var progressValues = new List<double>();
-            var progress = new Progress<double>(d => progressValues.Add(d));
+            var progress = new SynchronousProgress<double>(d => progressValues.Add(d));
             var url = "https://example.com/video.mp4";
             var destination = Path.Combine(_testDownloadPath, "video.mp4");
             var fileContent = new byte[100];
@@ -80,7 +80,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var progressValues = new List<double>();
-            var progress = new Progress<double>(d => progressValues.Add(d));
+            var progress = new SynchronousProgress<double>(d => progressValues.Add(d));
             var url = "https://example.com/video.mp4";
             var destination = Path.Combine(_testDownloadPath, "video.mp4");
             var fileContent = new byte[100];
@@ -103,7 +103,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var progressValues = new List<double>();
-            var progress = new Progress<double>(d => progressValues.Add(d));
+            var progress = new SynchronousProgress<double>(d => progressValues.Add(d));
             var url = "https://example.com/video.mp4";
             var destination = Path.Combine(_testDownloadPath, "video.mp4");
             var fileContent = new byte[8192 * 10]; // Large enough for multiple chunks
@@ -262,7 +262,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var progressInvokeCount = 0;
-            var progress = new Progress<double>(d => progressInvokeCount++);
+            var progress = new SynchronousProgress<double>(d => progressInvokeCount++);
             var url = "https://example.com/video.mp4";
             var destination = Path.Combine(_testDownloadPath, "video.mp4");
             var fileContent = new byte[8192 * 20];
@@ -590,7 +590,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var progressValues = new List<double>();
-            var progress = new Progress<double>(d => progressValues.Add(d));
+            var progress = new SynchronousProgress<double>(d => progressValues.Add(d));
             var url = "https://example.com/empty.mp4";
             var destination = Path.Combine(_testDownloadPath, "empty.mp4");
             var responseMessage = CreateHttpResponseMessage(Array.Empty<byte>(), HttpStatusCode.OK, contentLength: 0);
@@ -613,7 +613,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var progressValues = new List<double>();
-            var progress = new Progress<double>(d => progressValues.Add(d));
+            var progress = new SynchronousProgress<double>(d => progressValues.Add(d));
             var url = "https://example.com/video.mp4";
             var destination = Path.Combine(_testDownloadPath, "video.mp4");
             // Large file to generate many potential progress updates
@@ -804,5 +804,23 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// Synchronous implementation of <see cref="IProgress{T}"/> for testing.
+    /// Unlike <see cref="Progress{T}"/> which posts callbacks asynchronously
+    /// to a captured SynchronizationContext, this invokes the callback
+    /// synchronously on the calling thread — eliminating race conditions in tests.
+    /// </summary>
+    internal sealed class SynchronousProgress<T> : IProgress<T>
+    {
+        private readonly Action<T> _callback;
+
+        public SynchronousProgress(Action<T> callback)
+        {
+            _callback = callback ?? throw new ArgumentNullException(nameof(callback));
+        }
+
+        public void Report(T value) => _callback(value);
     }
 }

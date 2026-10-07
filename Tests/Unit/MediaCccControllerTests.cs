@@ -41,11 +41,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetConferenceEvents_propagates_OperationCanceledException()
         {
             _apiClientMock
-                .Setup(x => x.GetEventsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.GetEventsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new OperationCanceledException("Request cancelled"));
 
             await Assert.ThrowsAsync<OperationCanceledException>(() =>
-                _controller.GetConferenceEvents(1, CancellationToken.None));
+                _controller.GetConferenceEvents("37c3", CancellationToken.None));
         }
 
         [Fact]
@@ -87,10 +87,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetConferenceEvents_returns_500_on_generic_exception()
         {
             _apiClientMock
-                .Setup(x => x.GetEventsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                .Setup(x => x.GetEventsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new HttpRequestException("API error"));
 
-            var result = await _controller.GetConferenceEvents(1, CancellationToken.None);
+            var result = await _controller.GetConferenceEvents("37c3", CancellationToken.None);
 
             var statusCodeResult = Assert.IsType<ObjectResult>(result);
             Assert.Equal(500, statusCodeResult.StatusCode);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -17,6 +18,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private readonly ILogger<UserDataManager> _logger;
         private readonly object _lock = new object();
         private readonly Dictionary<Guid, UserData> _cache = new Dictionary<Guid, UserData>();
+        private readonly ConcurrentDictionary<Guid, Task> _loads = new ConcurrentDictionary<Guid, Task>();
+        private readonly SemaphoreSlim _persistLock = new SemaphoreSlim(1, 1);
 
         public UserDataManager(IApplicationPaths applicationPaths, ILogger<UserDataManager> logger)
         {
@@ -130,6 +133,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             {
                 var userData = GetOrCreateUserData(userId);
                 userData.PreferredAudioLanguages = new HashSet<string>(languages);
+                userData.PreferredAudioLanguageOrder = languages.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 userData.UpdatedAt = DateTime.UtcNow;
             }
         }
@@ -139,7 +143,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             lock (_lock)
             {
                 var userData = GetOrCreateUserData(userId);
-                return userData.PreferredAudioLanguages.ToList();
+                return userData.PreferredAudioLanguageOrder.Count > 0
+                    ? userData.PreferredAudioLanguageOrder.ToList()
+                    : userData.PreferredAudioLanguages.ToList();
             }
         }
 
@@ -149,6 +155,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             {
                 var userData = GetOrCreateUserData(userId);
                 userData.PreferredSubtitleLanguages = new HashSet<string>(languages);
+                userData.PreferredSubtitleLanguageOrder = languages.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 userData.UpdatedAt = DateTime.UtcNow;
             }
         }
@@ -158,49 +165,78 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             lock (_lock)
             {
                 var userData = GetOrCreateUserData(userId);
-                return userData.PreferredSubtitleLanguages.ToList();
+                return userData.PreferredSubtitleLanguageOrder.Count > 0
+                    ? userData.PreferredSubtitleLanguageOrder.ToList()
+                    : userData.PreferredSubtitleLanguages.ToList();
             }
         }
 
         public async Task PersistAsync(Guid userId)
         {
-            string filePath;
-            UserData snapshot;
-
-            lock (_lock)
+            await _persistLock.WaitAsync().ConfigureAwait(false);
+            try
             {
-                filePath = GetUserFilePath(userId);
+                string filePath;
+                UserData snapshot;
 
-                if (!_cache.TryGetValue(userId, out var dataToSave))
+                lock (_lock)
                 {
-                    return;
+                    filePath = GetUserFilePath(userId);
+
+                    if (!_cache.TryGetValue(userId, out var dataToSave))
+                    {
+                        return;
+                    }
+
+                    snapshot = new UserData
+                    {
+                        UserId = dataToSave.UserId,
+                        Watchlist = new HashSet<string>(dataToSave.Watchlist),
+                        SearchProgress = new HashSet<string>(dataToSave.SearchProgress),
+                        PreferredAudioLanguages = new HashSet<string>(dataToSave.PreferredAudioLanguages),
+                        PreferredSubtitleLanguages = new HashSet<string>(dataToSave.PreferredSubtitleLanguages),
+                        PreferredAudioLanguageOrder = dataToSave.PreferredAudioLanguageOrder.ToList(),
+                        PreferredSubtitleLanguageOrder = dataToSave.PreferredSubtitleLanguageOrder.ToList(),
+                        CreatedAt = dataToSave.CreatedAt,
+                        UpdatedAt = dataToSave.UpdatedAt
+                    };
                 }
 
-                snapshot = new UserData
+                var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
                 {
-                    UserId = dataToSave.UserId,
-                    Watchlist = new HashSet<string>(dataToSave.Watchlist),
-                    SearchProgress = new HashSet<string>(dataToSave.SearchProgress),
-                    PreferredAudioLanguages = new HashSet<string>(dataToSave.PreferredAudioLanguages),
-                    PreferredSubtitleLanguages = new HashSet<string>(dataToSave.PreferredSubtitleLanguages),
-                    CreatedAt = dataToSave.CreatedAt,
-                    UpdatedAt = dataToSave.UpdatedAt
-                };
+                    WriteIndented = true,
+                    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+                });
+
+                var directory = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                var tempPath = filePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    await File.WriteAllTextAsync(tempPath, json).ConfigureAwait(false);
+                    File.Move(tempPath, filePath, overwrite: true);
+                }
+                finally
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                    }
+                }
             }
-
-            var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
+            finally
             {
-                WriteIndented = true,
-                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-            });
-
-            var directory = Path.GetDirectoryName(filePath);
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-            {
-                Directory.CreateDirectory(directory);
+                _persistLock.Release();
             }
+        }
 
-            await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
+        public Task EnsureLoadedAsync(Guid userId)
+        {
+            return _loads.GetOrAdd(userId, LoadAsync);
         }
 
         public async Task LoadAsync(Guid userId)
@@ -231,6 +267,17 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 {
                     if (userData != null)
                     {
+                        userData.UserId = userId;
+                        if (userData.PreferredAudioLanguageOrder.Count == 0)
+                        {
+                            userData.PreferredAudioLanguageOrder = userData.PreferredAudioLanguages.ToList();
+                        }
+
+                        if (userData.PreferredSubtitleLanguageOrder.Count == 0)
+                        {
+                            userData.PreferredSubtitleLanguageOrder = userData.PreferredSubtitleLanguages.ToList();
+                        }
+
                         _cache[userId] = userData;
                     }
                     else

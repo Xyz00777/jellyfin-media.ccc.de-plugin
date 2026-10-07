@@ -14,12 +14,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private readonly IMediaCccApiClient _apiClient;
         private readonly IRecordingSelector _recordingSelector;
         private readonly string _archivePath;
+        private readonly Func<PluginConfiguration>? _configurationProvider;
 
-        public StrmGenerator(IMediaCccApiClient apiClient, IRecordingSelector recordingSelector, string archivePath)
+        public StrmGenerator(
+            IMediaCccApiClient apiClient,
+            IRecordingSelector recordingSelector,
+            string archivePath,
+            Func<PluginConfiguration>? configurationProvider = null)
         {
             _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
             _recordingSelector = recordingSelector ?? throw new ArgumentNullException(nameof(recordingSelector));
             _archivePath = archivePath ?? throw new ArgumentNullException(nameof(archivePath));
+            _configurationProvider = configurationProvider;
         }
 
         public async Task<StrmResult?> GenerateStrmAsync(Conference conference, Event evt, CancellationToken cancellationToken)
@@ -34,8 +40,22 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 return null;
             }
 
-            var recording = _recordingSelector.SelectBestRecording(evt.Recordings, null);
+            var configuration = _configurationProvider?.Invoke();
+            var recording = _recordingSelector.SelectBestRecording(
+                evt.Recordings,
+                configuration == null
+                    ? null
+                    : new RecordingPreferences
+                    {
+                        PreferredLanguages = configuration.PreferredAudioLanguages,
+                        QualityPreference = configuration.PreferredQuality
+                    });
             if (recording == null)
+            {
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(recording.Url))
             {
                 return null;
             }
@@ -47,7 +67,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 Directory.CreateDirectory(directory);
             }
 
-            await File.WriteAllTextAsync(filePath, recording.Url, cancellationToken).ConfigureAwait(false);
+            if (!File.Exists(filePath) || !string.Equals(await File.ReadAllTextAsync(filePath, cancellationToken).ConfigureAwait(false), recording.Url, StringComparison.Ordinal))
+            {
+                await File.WriteAllTextAsync(filePath, recording.Url, cancellationToken).ConfigureAwait(false);
+            }
 
             return new StrmResult
             {
@@ -73,7 +96,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var conference = MapToConference(conferenceDto);
-                var events = await _apiClient.GetEventsAsync(conferenceDto.Id, cancellationToken).ConfigureAwait(false);
+                var events = await GetEventsAsync(conferenceDto, cancellationToken).ConfigureAwait(false);
 
                 if (events == null || !events.Any())
                 {
@@ -168,12 +191,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             return new Recording
             {
                 Id = dto.Id,
-                Size = dto.Size,
-                Length = dto.Length,
-                MimeType = dto.MimeType ?? string.Empty,
+                Size = dto.Size ?? 0,
+                Length = dto.Length ?? 0,
+                MimeType = dto.EffectiveMimeType ?? string.Empty,
                 Language = dto.Language ?? string.Empty,
-                Url = dto.Url ?? string.Empty,
-                Format = dto.Format,
+                Url = dto.EffectiveUrl,
+                Format = dto.EffectiveFormat,
                 HighQuality = dto.HighQuality,
                 Width = dto.Width,
                 Height = dto.Height,
@@ -185,7 +208,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         public async Task CreateStrmFilesForConference(ConferenceDto conferenceDto, CancellationToken cancellationToken)
         {
             var conference = MapToConference(conferenceDto);
-            var events = await _apiClient.GetEventsAsync(conferenceDto.Id, cancellationToken).ConfigureAwait(false);
+            var events = await GetEventsAsync(conferenceDto, cancellationToken).ConfigureAwait(false);
 
             if (events == null || !events.Any())
             {
@@ -209,11 +232,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 var evt = MapToEvent(eventDto);
                 var filePath = BuildStrmFilePath(conference, evt, conferenceFirstDayStr);
 
-                if (File.Exists(filePath))
-                {
-                    continue;
-                }
-
                 await GenerateStrmAsync(conference, evt, conferenceFirstDayStr, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -223,6 +241,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             var conference = MapToConference(conferenceDto);
             var conferenceDir = Path.Combine(_archivePath, StrmHelper.NormalizeConferenceDirectory(conference.Acronym));
             return Directory.Exists(conferenceDir);
+        }
+
+        private Task<EventDto[]> GetEventsAsync(ConferenceDto conference, CancellationToken cancellationToken)
+        {
+            if (conference.Id > 0)
+            {
+                return _apiClient.GetEventsAsync(conference.Id, cancellationToken);
+            }
+
+            return string.IsNullOrWhiteSpace(conference.Acronym)
+                ? Task.FromResult(Array.Empty<EventDto>())
+                : _apiClient.GetEventsAsync(conference.Acronym, cancellationToken);
         }
     }
 }

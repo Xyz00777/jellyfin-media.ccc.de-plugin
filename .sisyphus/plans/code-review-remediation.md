@@ -186,7 +186,7 @@
   - `IStrmFileGenerator` + `TreeGenerationResult` → own files
   - Acceptance: Each interface/type in its own file, matching project convention
 
-- [ ] **P7-2: Add version & packaging**
+- [x] **P7-2: Add version & packaging**
   - Add `<Version>1.0.0</Version>` to `.csproj`
   - Add `<GenerateDocumentationFile>true</GenerateDocumentationFile>`
   - Add `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`

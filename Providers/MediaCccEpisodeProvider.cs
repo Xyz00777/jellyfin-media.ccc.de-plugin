@@ -115,11 +115,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
                 return 1;
             }
 
-            // Deterministic: SHA256 hash of the GUID, take first 4 bytes as int, mod 100 + 1
-            // This is stable across process restarts unlike string.GetHashCode()
+            // Deterministic and stable across process restarts. Use the full positive
+            // integer range rather than a small modulo that creates frequent collisions.
             var hashBytes = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(eventDto.Guid));
-            var hashInt = BitConverter.ToInt32(hashBytes, 0);
-            return Math.Abs(hashInt % 100) + 1;
+            var hashValue = BitConverter.ToUInt32(hashBytes, 0);
+            return (int)(hashValue % (uint)(int.MaxValue - 1)) + 1;
         }
 
         private int? DeriveParentIndexNumber(EventDto eventDto)

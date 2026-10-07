@@ -1,146 +1,158 @@
-(function() {
-    'use strict';
+(() => {
 
-    const ApiClient = window.ApiClient;
-    
-    const state = {
-        conferences: [],
-        filteredConferences: [],
-        searchTerm: '',
-        yearFilter: ''
-    };
+    const apiClient = window.ApiClient;
+    const state = { conferences: [], filteredConferences: [], searchTerm: '', yearFilter: '' };
 
-    function init() {
-        loadConferences();
-        setupEventListeners();
+    function apiRequest(path, options) {
+        const request = options || {};
+        return fetch(`${apiClient.serverAddress()}/media_ccc${path}`, {
+            method: request.method || 'GET',
+            headers: {
+                Authorization: `MediaBrowser Token="${apiClient.accessToken()}"`,
+                'Content-Type': 'application/json'
+            },
+            body: request.body ? JSON.stringify(request.body) : undefined
+        }).then((response) => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.status === 204 ? null : response.json();
+        });
     }
 
-    async function loadConferences() {
+    function init() {
+        document.getElementById('conferenceSearch').addEventListener('input', (event) => {
+            state.searchTerm = event.target.value.toLowerCase();
+            filterConferences();
+        });
+        document.getElementById('yearFilter').addEventListener('change', (event) => {
+            state.yearFilter = event.target.value;
+            filterConferences();
+        });
+        loadConferences();
+    }
+
+    function loadConferences() {
         const grid = document.getElementById('conferenceGrid');
-        grid.innerHTML = '<div class="loading">Loading conferences...</div>';
-
-        try {
-            const response = await ApiClient.fetch({
-                url: 'media_ccc/conferences',
-                type: 'GET'
+        grid.textContent = 'Loading conferences...';
+        apiRequest('/conferences')
+            .then((conferences) => {
+                state.conferences = conferences || [];
+                state.filteredConferences = state.conferences.slice();
+                populateYearFilter();
+                renderConferences();
+            })
+            .catch(() => {
+                grid.textContent = 'Failed to load conferences. Please try again later.';
             });
-
-            state.conferences = response || [];
-            state.filteredConferences = [...state.conferences];
-            
-            populateYearFilter();
-            renderConferences();
-        } catch (error) {
-            console.error('Failed to load conferences:', error);
-            grid.innerHTML = '<div class="error">Failed to load conferences. Please try again later.</div>';
-        }
     }
 
     function populateYearFilter() {
-        const yearFilter = document.getElementById('yearFilter');
-        const years = new Set();
-        
-        state.conferences.forEach(conference => {
-            if (conference.updatedAt) {
-                const year = new Date(conference.updatedAt).getFullYear();
-                years.add(year);
-            }
-        });
+        const select = document.getElementById('yearFilter');
+        select.textContent = '';
+        const allYears = document.createElement('option');
+        allYears.value = '';
+        allYears.textContent = 'All Years';
+        select.appendChild(allYears);
 
-        const sortedYears = Array.from(years).sort((a, b) => b - a);
-        
-        yearFilter.innerHTML = '<option value="">All Years</option>';
-        sortedYears.forEach(year => {
+        const years = new Set(state.conferences
+            .filter((conference) => conference.updatedAt)
+            .map((conference) => new Date(conference.updatedAt).getFullYear()));
+        Array.from(years).sort((left, right) => right - left).forEach((year) => {
             const option = document.createElement('option');
-            option.value = year;
-            option.textContent = year;
-            yearFilter.appendChild(option);
-        });
-    }
-
-    function setupEventListeners() {
-        const searchInput = document.getElementById('conferenceSearch');
-        const yearFilter = document.getElementById('yearFilter');
-
-        searchInput.addEventListener('input', (e) => {
-            state.searchTerm = e.target.value.toLowerCase();
-            filterConferences();
-        });
-
-        yearFilter.addEventListener('change', (e) => {
-            state.yearFilter = e.target.value;
-            filterConferences();
+            option.value = String(year);
+            option.textContent = String(year);
+            select.appendChild(option);
         });
     }
 
     function filterConferences() {
-        state.filteredConferences = state.conferences.filter(conference => {
-            const matchesSearch = !state.searchTerm || 
-                conference.title.toLowerCase().includes(state.searchTerm) ||
-                conference.acronym.toLowerCase().includes(state.searchTerm);
-
-            const matchesYear = !state.yearFilter || 
-                (conference.updatedAt && new Date(conference.updatedAt).getFullYear().toString() === state.yearFilter);
-
-            return matchesSearch && matchesYear;
+        state.filteredConferences = state.conferences.filter((conference) => {
+            const title = String(conference.title || '').toLowerCase();
+            const acronym = String(conference.acronym || '').toLowerCase();
+            const matchesSearch = !state.searchTerm || title.includes(state.searchTerm) || acronym.includes(state.searchTerm);
+            const year = conference.updatedAt ? String(new Date(conference.updatedAt).getFullYear()) : '';
+            return matchesSearch && (!state.yearFilter || year === state.yearFilter);
         });
-
         renderConferences();
     }
 
     function renderConferences() {
         const grid = document.getElementById('conferenceGrid');
-        
+        grid.textContent = '';
         if (state.filteredConferences.length === 0) {
-            grid.innerHTML = '<div class="no-results">No conferences found</div>';
+            grid.textContent = 'No conferences found.';
             return;
         }
 
-        grid.innerHTML = state.filteredConferences.map(conference => {
-            const posterUrl = conference.url ? 
-                `https://api.media.ccc.de/public/conferences/${conference.id}/poster` :
-                '';
-            
-            const dateStr = conference.updatedAt ? 
-                new Date(conference.updatedAt).toLocaleDateString() : 
-                '';
+        state.filteredConferences.forEach((conference) => {
+            const card = document.createElement('button');
+            card.type = 'button';
+            card.className = 'conference-card';
+            card.addEventListener('click', () => loadEvents(conference));
 
-            return `
-                <div class="conference-card" data-conference-id="${conference.id}">
-                    <img src="${posterUrl}" alt="${conference.acronym}" 
-                         onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22280%22 height=%22160%22%3E%3Crect fill=%22%232a2a2a%22 width=%22280%22 height=%22160%22/%3E%3Ctext fill=%22%23888%22 x=%22140%22 y=%2280%22 text-anchor=%22middle%22 font-size=%2220%22%3E${conference.acronym}%3C/text%3E%3C/svg%3E'">
-                    <div class="conference-card-content">
-                        <h3>${escapeHtml(conference.title)}</h3>
-                        <p class="subtitle">${escapeHtml(conference.acronym)}</p>
-                        ${dateStr ? `<span class="date">${dateStr}</span>` : ''}
-                    </div>
-                </div>
-            `;
-        }).join('');
+            const image = document.createElement('img');
+            image.src = `https://api.media.ccc.de/public/conferences/${encodeURIComponent(conference.acronym)}/poster`;
+            image.alt = String(conference.acronym || conference.title || 'Conference');
+            card.appendChild(image);
 
-        grid.querySelectorAll('.conference-card').forEach(card => {
-            card.addEventListener('click', () => {
-                const conferenceId = card.dataset.conferenceId;
-                if (conferenceId) {
-                    navigateToEvents(conferenceId, state.conferences.find(c => c.id == conferenceId));
-                }
-            });
+            const content = document.createElement('span');
+            content.className = 'conference-card-content';
+            const title = document.createElement('strong');
+            title.textContent = String(conference.title || 'Untitled conference');
+            const acronym = document.createElement('span');
+            acronym.textContent = String(conference.acronym || '');
+            content.append(title, acronym);
+            card.appendChild(content);
+            grid.appendChild(card);
         });
     }
 
-    function navigateToEvents(conferenceId, conference) {
-        const url = `media_ccc/events/${conferenceId}`;
-        if (conference) {
-            Dashboard.navigate(url + '?title=' + encodeURIComponent(conference.title));
-        } else {
-            Dashboard.navigate(url);
-        }
+    function loadEvents(conference) {
+        const panel = document.getElementById('eventPanel');
+        const heading = document.getElementById('eventHeading');
+        const list = document.getElementById('eventList');
+        panel.hidden = false;
+        heading.textContent = String(conference.title || conference.acronym || 'Conference events');
+        list.textContent = 'Loading events...';
+
+        apiRequest(`/conferences/${encodeURIComponent(conference.acronym)}/events`)
+            .then((events) => renderEvents(events || []))
+            .catch(() => { list.textContent = 'Failed to load events.'; });
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    function renderEvents(events) {
+        const list = document.getElementById('eventList');
+        list.textContent = '';
+        if (events.length === 0) {
+            list.textContent = 'No events found.';
+            return;
+        }
+
+        events.forEach((event) => {
+            const row = document.createElement('div');
+            row.className = 'event-row';
+            const title = document.createElement('span');
+            title.textContent = String(event.title || event.guid || 'Untitled event');
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = 'Add to watchlist and download';
+            button.addEventListener('click', () => enqueueEvent(event.guid, button));
+            row.append(title, button);
+            list.appendChild(row);
+        });
+    }
+
+    function enqueueEvent(eventGuid, button) {
+        button.disabled = true;
+        Promise.resolve()
+            .then(() => apiRequest(`/watchlist/${encodeURIComponent(eventGuid)}`, { method: 'POST' }))
+            .then(() => apiRequest(`/downloads/${encodeURIComponent(eventGuid)}`, { method: 'POST' }))
+            .then(() => { button.textContent = 'Queued'; })
+            .catch(() => {
+                button.disabled = false;
+                button.textContent = 'Retry download';
+            });
     }
 
     if (document.readyState === 'loading') {

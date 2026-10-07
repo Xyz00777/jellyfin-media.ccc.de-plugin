@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <title>Browse Conferences - MediaCCC</title>
     <style>
@@ -119,6 +119,11 @@
             <div id="conferenceGrid" class="conference-grid">
                 <div class="loading">Loading conferences...</div>
             </div>
+
+            <section id="eventPanel" aria-live="polite" hidden>
+                <h2 id="eventHeading">Events</h2>
+                <div id="eventList"></div>
+            </section>
         </div>
     </div>
 </body>

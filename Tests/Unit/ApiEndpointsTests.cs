@@ -7,6 +7,7 @@ using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Controllers;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Services;
+using MediaBrowser.Common.Api;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -110,11 +111,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetConferenceEvents_ReturnsOkWithEvents()
         {
             // Arrange
-            var conferenceId = 1;
+            var conferenceId = "37c3";
             var events = new EventDto[]
             {
-                new EventDto { Guid = "event-1", Title = "Opening Ceremony", ConferenceId = conferenceId },
-                new EventDto { Guid = "event-2", Title = "Closing Ceremony", ConferenceId = conferenceId }
+                new EventDto { Guid = "event-1", Title = "Opening Ceremony", ConferenceId = 1 },
+                new EventDto { Guid = "event-2", Title = "Closing Ceremony", ConferenceId = 1 }
             };
 
             _apiClientMock
@@ -136,11 +137,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetConferenceEvents_Returns404_ForInvalidConferenceId()
         {
             // Arrange
-            var invalidConferenceId = -1;
+            var invalidConferenceId = "-1";
 
             _apiClientMock
                 .Setup(x => x.GetEventsAsync(invalidConferenceId, It.IsAny<CancellationToken>()))
-                .ThrowsAsync(new ArgumentException("Conference ID must be positive"));
+                .ThrowsAsync(new ArgumentException("Conference identifier is invalid"));
 
             var controller = CreateMediaCccController();
 
@@ -155,7 +156,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetConferenceEvents_ReturnsEmptyArray_WhenNoEvents()
         {
             // Arrange
-            var conferenceId = 999;
+            var conferenceId = "unknown";
 
             _apiClientMock
                 .Setup(x => x.GetEventsAsync(conferenceId, It.IsAny<CancellationToken>()))
@@ -401,7 +402,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         #region MediaCccController - GetWatchlist Tests
 
         [Fact]
-        public void GetWatchlist_ReturnsOkWithWatchlist()
+        public async Task GetWatchlist_ReturnsOkWithWatchlist()
         {
             // Arrange
             var userId = Guid.NewGuid();
@@ -414,7 +415,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var controller = CreateMediaCccControllerWithUser(userId);
 
             // Act
-            var result = controller.GetWatchlist();
+            var result = await controller.GetWatchlist();
 
             // Assert
             var okResult = Assert.IsType<OkObjectResult>(result);
@@ -423,20 +424,20 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public void GetWatchlist_Returns401_WhenUserNotAuthenticated()
+        public async Task GetWatchlist_Returns401_WhenUserNotAuthenticated()
         {
             // Arrange
             var controller = CreateMediaCccControllerWithoutUser();
 
             // Act
-            var result = controller.GetWatchlist();
+            var result = await controller.GetWatchlist();
 
             // Assert
             Assert.IsType<UnauthorizedResult>(result);
         }
 
         [Fact]
-        public void GetWatchlist_ReturnsEmptyList_ForNewUser()
+        public async Task GetWatchlist_ReturnsEmptyList_ForNewUser()
         {
             // Arrange
             var userId = Guid.NewGuid();
@@ -448,7 +449,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var controller = CreateMediaCccControllerWithUser(userId);
 
             // Act
-            var result = controller.GetWatchlist();
+            var result = await controller.GetWatchlist();
 
             // Assert
             var okResult = Assert.IsType<OkObjectResult>(result);
@@ -461,27 +462,27 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         #region SyncController - TriggerSync Tests
 
         [Fact]
-        public void TriggerSync_Returns202Accepted_ForAdminUser()
+        public async Task TriggerSync_Returns202Accepted_ForAdminUser()
         {
             // Arrange
             var controller = CreateSyncControllerAsAdmin();
 
             // Act
-            var result = controller.TriggerSync();
+            var result = await controller.TriggerSync();
 
             // Assert
             Assert.IsType<AcceptedResult>(result);
         }
 
         [Fact]
-        public void TriggerSync_Returns202_ForAnyAuthenticatedUser()
+        public async Task TriggerSync_Returns202_ForAnyAuthenticatedUser()
         {
             // Authorization is handled by [Authorize(Policy = "Elevation")] at class level,
             // not by manual IsAdmin() checks inside the method.
             var userId = Guid.NewGuid();
             var controller = CreateSyncControllerWithUser(userId, isAdmin: false);
 
-            var result = controller.TriggerSync();
+            var result = await controller.TriggerSync();
 
             Assert.IsType<AcceptedResult>(result);
         }
@@ -661,12 +662,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public void TriggerSync_Returns202_WithoutManualAuthCheck()
+        public async Task TriggerSync_Returns202_WithoutManualAuthCheck()
         {
             // Authorization handled by class-level [Authorize(Policy = "Elevation")]
             var controller = CreateSyncControllerWithoutUser();
 
-            var result = controller.TriggerSync();
+            var result = await controller.TriggerSync();
 
             Assert.IsType<AcceptedResult>(result);
         }
@@ -762,7 +763,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert - SyncController has class-level Authorize attribute with Elevation policy
             Assert.NotNull(authorizeAttribute);
-            Assert.Equal("Elevation", authorizeAttribute.Policy);
+            Assert.Equal(Policies.RequiresElevation, authorizeAttribute.Policy);
         }
 
         #endregion

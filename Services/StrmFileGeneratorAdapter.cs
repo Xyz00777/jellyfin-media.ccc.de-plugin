@@ -53,7 +53,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             var sanitizedSlug = StrmHelper.SanitizeFileName(@event.Slug ?? @event.Guid ?? "unknown");
             var filePath = Path.Combine(directory, $"{sanitizedSlug}.strm");
 
-            if (File.Exists(filePath))
+            if (File.Exists(filePath) && string.Equals(
+                    await File.ReadAllTextAsync(filePath, cancellationToken).ConfigureAwait(false),
+                    recording.Url,
+                    StringComparison.Ordinal))
             {
                 return;
             }
@@ -66,12 +69,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             return new Recording
             {
                 Id = dto.Id,
-                Size = dto.Size,
-                Length = dto.Length,
-                MimeType = dto.MimeType ?? string.Empty,
+                Size = dto.Size ?? 0,
+                Length = dto.Length ?? 0,
+                MimeType = dto.EffectiveMimeType ?? string.Empty,
                 Language = dto.Language ?? string.Empty,
-                Url = dto.Url ?? string.Empty,
-                Format = dto.Format,
+                Url = dto.EffectiveUrl,
+                Format = dto.EffectiveFormat,
                 HighQuality = dto.HighQuality,
                 Width = dto.Width,
                 Height = dto.Height,

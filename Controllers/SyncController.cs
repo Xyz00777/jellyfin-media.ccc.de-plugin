@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Services;
+using MediaBrowser.Common.Api;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -14,30 +15,36 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
 {
     [ApiController]
     [Route("media_ccc/sync")]
-    [Authorize(Policy = "Elevation")]
+    [Authorize(Policy = Policies.RequiresElevation)]
     public class SyncController : ControllerBase
     {
         private readonly ILogger<SyncController> _logger;
         private readonly ISyncLogger _syncLogger;
-        private readonly IMediaCccApiClient _apiClient;
+        private readonly ISyncTrigger? _syncTrigger;
 
         public SyncController(
             ILogger<SyncController> logger,
             ISyncLogger syncLogger,
-            IMediaCccApiClient apiClient)
+            IMediaCccApiClient apiClient,
+            ISyncTrigger? syncTrigger = null)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _syncLogger = syncLogger ?? throw new ArgumentNullException(nameof(syncLogger));
-            _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
+            _ = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
+            _syncTrigger = syncTrigger;
         }
 
         [HttpPost("trigger")]
         [ProducesResponseType(202)]
         [ProducesResponseType(401)]
         [ProducesResponseType(403)]
-        public IActionResult TriggerSync()
+        public async Task<IActionResult> TriggerSync(CancellationToken cancellationToken = default)
         {
             _logger.LogInformation("Manual sync triggered by user");
+            if (_syncTrigger != null)
+            {
+                await _syncTrigger.TriggerSyncAsync(cancellationToken).ConfigureAwait(false);
+            }
             return Accepted();
         }
 
@@ -65,9 +72,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(204)]
         [ProducesResponseType(401)]
         [ProducesResponseType(403)]
-        public IActionResult ClearSyncHistory()
+        public async Task<IActionResult> ClearSyncHistory()
         {
             _syncLogger.ClearHistory();
+            await _syncLogger.PersistAsync().ConfigureAwait(false);
             return NoContent();
         }
     }

@@ -41,6 +41,19 @@ namespace Jellyfin.Plugin.MediaCccDe
                     MenuSection = "server",
                     MenuIcon = "bookmark"
                 },
+                new PluginPageInfo
+                {
+                    Name = "Language Preferences",
+                    EmbeddedResourcePath = GetType().Namespace + ".Pages.language-prefs.html",
+                    EnableInMainMenu = true,
+                    MenuSection = "server",
+                    MenuIcon = "language"
+                },
+                new PluginPageInfo
+                {
+                    Name = "MediaCCC Settings",
+                    EmbeddedResourcePath = GetType().Namespace + ".Pages.settings.html"
+                },
                 new PluginPageInfo 
                 { 
                     Name = Name + " Sync Log", 

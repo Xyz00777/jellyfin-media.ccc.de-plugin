@@ -53,7 +53,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
                 if (existingItem != null)
                 {
-                    return;
+                    if (existingItem.Status != DownloadStatus.Failed)
+                    {
+                        return;
+                    }
+
+                    _queue.Remove(existingItem.Id);
                 }
 
                 if (item.CreatedAt == default)

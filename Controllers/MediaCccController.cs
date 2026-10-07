@@ -69,16 +69,21 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(typeof(EventDto[]), 200)]
         [ProducesResponseType(400)]
         [ProducesResponseType(500)]
-        public async Task<IActionResult> GetConferenceEvents(int conferenceId, CancellationToken cancellationToken)
+        public async Task<IActionResult> GetConferenceEvents(string conferenceId, CancellationToken cancellationToken)
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(conferenceId))
+                {
+                    return BadRequest(new { error = "Conference identifier cannot be empty" });
+                }
+
                 var events = await _apiClient.GetEventsAsync(conferenceId, cancellationToken).ConfigureAwait(false);
                 return Ok(events);
             }
             catch (ArgumentException ex)
             {
-                _logger.LogWarning(ex, "Invalid conference ID: {ConferenceId}", conferenceId);
+                _logger.LogWarning(ex, "Invalid conference identifier: {ConferenceId}", conferenceId);
                 return BadRequest(new { error = ex.Message });
             }
             catch (OperationCanceledException)
@@ -172,6 +177,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
                 return Unauthorized();
             }
 
+            await _userDataManager.EnsureLoadedAsync(userId.Value).ConfigureAwait(false);
+
             if (string.IsNullOrWhiteSpace(eventGuid))
             {
                 return BadRequest(new { error = "Event GUID cannot be empty" });
@@ -205,6 +212,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
                 return Unauthorized();
             }
 
+            await _userDataManager.EnsureLoadedAsync(userId.Value).ConfigureAwait(false);
+
             if (string.IsNullOrWhiteSpace(eventGuid))
             {
                 return BadRequest(new { error = "Event GUID cannot be empty" });
@@ -223,13 +232,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [HttpGet("watchlist")]
         [ProducesResponseType(typeof(List<string>), 200)]
         [ProducesResponseType(401)]
-        public IActionResult GetWatchlist()
+        public async Task<IActionResult> GetWatchlist()
         {
             var userId = GetUserGuid();
             if (userId == null)
             {
                 return Unauthorized();
             }
+
+            await _userDataManager.EnsureLoadedAsync(userId.Value).ConfigureAwait(false);
 
             var watchlist = _userDataManager.GetWatchlist(userId.Value);
             return Ok(watchlist);
@@ -242,13 +253,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [HttpGet("languages/audio")]
         [ProducesResponseType(typeof(List<string>), 200)]
         [ProducesResponseType(401)]
-        public IActionResult GetPreferredAudioLanguages()
+        public async Task<IActionResult> GetPreferredAudioLanguages()
         {
             var userId = GetUserGuid();
             if (userId == null)
             {
                 return Unauthorized();
             }
+
+            await _userDataManager.EnsureLoadedAsync(userId.Value).ConfigureAwait(false);
 
             var languages = _userDataManager.GetPreferredAudioLanguages(userId.Value);
             return Ok(languages);
@@ -271,6 +284,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
                 return Unauthorized();
             }
 
+            await _userDataManager.EnsureLoadedAsync(userId.Value).ConfigureAwait(false);
+
             if (languages == null)
             {
                 return BadRequest(new { error = "Languages list cannot be null" });
@@ -289,13 +304,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [HttpGet("languages/subtitles")]
         [ProducesResponseType(typeof(List<string>), 200)]
         [ProducesResponseType(401)]
-        public IActionResult GetPreferredSubtitleLanguages()
+        public async Task<IActionResult> GetPreferredSubtitleLanguages()
         {
             var userId = GetUserGuid();
             if (userId == null)
             {
                 return Unauthorized();
             }
+
+            await _userDataManager.EnsureLoadedAsync(userId.Value).ConfigureAwait(false);
 
             var languages = _userDataManager.GetPreferredSubtitleLanguages(userId.Value);
             return Ok(languages);
@@ -317,6 +334,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             {
                 return Unauthorized();
             }
+
+            await _userDataManager.EnsureLoadedAsync(userId.Value).ConfigureAwait(false);
 
             if (languages == null)
             {

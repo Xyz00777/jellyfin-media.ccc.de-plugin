@@ -23,18 +23,21 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private readonly IUserManager _userManager;
         private readonly IApplicationPaths _applicationPaths;
         private readonly ILogger<UserLibraryService> _logger;
+        private readonly Func<PluginConfiguration>? _configurationProvider;
         private readonly object _lock = new object();
 
         public UserLibraryService(
             ILibraryManager libraryManager,
             IUserManager userManager,
             IApplicationPaths applicationPaths,
-            ILogger<UserLibraryService> logger)
+            ILogger<UserLibraryService> logger,
+            Func<PluginConfiguration>? configurationProvider = null)
         {
             _libraryManager = libraryManager;
             _userManager = userManager;
             _applicationPaths = applicationPaths;
             _logger = logger;
+            _configurationProvider = configurationProvider;
         }
 
         public async Task<UserLibrary> GetOrCreateUserLibraryAsync(Guid userId, string username)
@@ -181,7 +184,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
         internal string GetWatchlistBasePath()
         {
-            return Path.Combine(_applicationPaths.PluginConfigurationsPath, "ccc-media", "watchlists");
+            var configuredPath = _configurationProvider?.Invoke().WatchlistPath;
+            if (string.IsNullOrWhiteSpace(configuredPath))
+            {
+                return Path.Combine(_applicationPaths.PluginConfigurationsPath, "ccc-media", "watchlists");
+            }
+
+            return Path.IsPathRooted(configuredPath)
+                ? Path.GetFullPath(configuredPath)
+                : Path.GetFullPath(Path.Combine(_applicationPaths.PluginConfigurationsPath, configuredPath));
         }
 
         private UserLibrary? FindUserLibrary(Guid userId, string sanitizedUsername)

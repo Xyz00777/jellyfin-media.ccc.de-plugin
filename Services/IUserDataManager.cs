@@ -79,5 +79,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         /// Loads user data from disk.
         /// </summary>
         Task LoadAsync(Guid userId);
+
+        Task EnsureLoadedAsync(Guid userId);
     }
 }

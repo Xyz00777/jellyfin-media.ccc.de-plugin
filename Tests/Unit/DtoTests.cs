@@ -509,8 +509,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             Assert.NotNull(recording);
             Assert.Equal("mp3", recording.Format);
-            Assert.Equal(0, recording.Width);  // Default for audio
-            Assert.Equal(0, recording.Height); // Default for audio
+            Assert.Null(recording.Width);
+            Assert.Null(recording.Height);
             Assert.Equal(50000000L, recording.Size);
         }
 

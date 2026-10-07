@@ -114,8 +114,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
             ValidateUrl(url);
             ValidateDestinationPath(destinationPath);
-
             cancellationToken.ThrowIfCancellationRequested();
+            await RemoteUrlValidator.ValidatePublicHttpsUrlAsync(url, cancellationToken).ConfigureAwait(false);
 
             var directory = Path.GetDirectoryName(destinationPath);
             if (!string.IsNullOrEmpty(directory))

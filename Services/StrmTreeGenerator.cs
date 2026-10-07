@@ -67,7 +67,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (conference.Id <= 0)
+                if (conference.Id <= 0 && string.IsNullOrWhiteSpace(conference.Acronym))
                 {
                     continue;
                 }
@@ -97,7 +97,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             EventDto[] events;
             try
             {
-                events = await _apiClient.GetEventsAsync(conference.Id, cancellationToken).ConfigureAwait(false);
+                events = conference.Id > 0
+                    ? await _apiClient.GetEventsAsync(conference.Id, cancellationToken).ConfigureAwait(false)
+                    : await _apiClient.GetEventsAsync(conference.Acronym, cancellationToken).ConfigureAwait(false);
             }
             catch (HttpRequestException ex)
             {
@@ -169,13 +171,27 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
                     try
                     {
-                        await _strmGenerator.GenerateStrmAsync(seasonPath, evt, cancellationToken).ConfigureAwait(false);
-                        result.FilesCreated++;
-
                         var sanitizedSlug = StrmHelper.SanitizeFileName(evt.Slug ?? evt.Guid ?? "unknown");
                         var fileName = $"{sanitizedSlug}.strm";
                         var filePath = Path.Combine(seasonPath, fileName);
+                        var wasExisting = File.Exists(filePath);
+
+                        if (evt.Recordings == null || evt.Recordings.Count == 0)
+                        {
+                            if (wasExisting)
+                            {
+                                currentFiles.Add(filePath);
+                            }
+
+                            continue;
+                        }
+
+                        await _strmGenerator.GenerateStrmAsync(seasonPath, evt, cancellationToken).ConfigureAwait(false);
                         currentFiles.Add(filePath);
+                        if (!wasExisting)
+                        {
+                            result.FilesCreated++;
+                        }
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {

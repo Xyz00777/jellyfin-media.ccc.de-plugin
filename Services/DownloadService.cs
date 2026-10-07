@@ -94,17 +94,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         /// <param name="cancellationToken">Cancellation token.</param>
         public async Task ProcessQueueAsync(CancellationToken cancellationToken)
         {
-            var item = await _queue.DequeueAsync().ConfigureAwait(false);
-
-            if (item == null)
-            {
-                return;
-            }
-
+            DownloadQueueItem? item = null;
             await _concurrencyLimiter.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                item = await _queue.DequeueAsync().ConfigureAwait(false);
+                if (item == null)
+                {
+                    return;
+                }
 
                 if (_fileService.FileExists(item.DestinationPath))
                 {
@@ -121,19 +119,23 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                     _fileService.EnsureDirectoryExists(directory);
                 }
 
-                var progress = new Progress<double>(p =>
+                var lastPersistedProgress = -0.05;
+                var progress = new SynchronousProgress<double>(p =>
                 {
-                    _ = Task.Run(async () =>
+                    if (p - lastPersistedProgress < 0.05 && p < 1.0)
                     {
-                        try
-                        {
-                            await _queue.UpdateProgressAsync(item.Id, p).ConfigureAwait(false);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Failed to report progress for download {Id}", item.Id);
-                        }
-                    });
+                        return;
+                    }
+
+                    try
+                    {
+                        _queue.UpdateProgressAsync(item.Id, p).GetAwaiter().GetResult();
+                        lastPersistedProgress = p;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to report progress for download {Id}", item.Id);
+                    }
                 });
 
                 await _fileService.DownloadFileAsync(
@@ -147,19 +149,39 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             }
             catch (OperationCanceledException)
             {
+                if (item == null)
+                {
+                    throw;
+                }
+
                 await CleanupFailedDownloadAsync(item, "Download cancelled").ConfigureAwait(false);
                 throw;
             }
             catch (HttpRequestException ex)
             {
+                if (item == null)
+                {
+                    throw;
+                }
+
                 await HandleDownloadErrorAsync(item, ex).ConfigureAwait(false);
             }
             catch (IOException ex)
             {
+                if (item == null)
+                {
+                    throw;
+                }
+
                 await HandleDownloadErrorAsync(item, ex).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
+                if (item == null)
+                {
+                    throw;
+                }
+
                 await HandleDownloadErrorAsync(item, ex).ConfigureAwait(false);
             }
             finally
@@ -202,6 +224,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 _cts.Dispose();
                 _disposed = true;
             }
+        }
+
+        private sealed class SynchronousProgress<T> : IProgress<T>
+        {
+            private readonly Action<T> _callback;
+
+            public SynchronousProgress(Action<T> callback)
+            {
+                _callback = callback ?? throw new ArgumentNullException(nameof(callback));
+            }
+
+            public void Report(T value) => _callback(value);
         }
     }
 }

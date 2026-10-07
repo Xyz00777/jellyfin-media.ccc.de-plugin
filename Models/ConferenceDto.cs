@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Jellyfin.Plugin.MediaCccDe.Models
@@ -31,5 +32,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Models
 
         [JsonPropertyName("description")]
         public string? Description { get; set; }
+
+        [JsonPropertyName("events")]
+        public List<EventDto>? Events { get; set; }
     }
 }

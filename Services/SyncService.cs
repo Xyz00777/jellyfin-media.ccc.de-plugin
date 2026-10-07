@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.MediaCccDe.Services
 {
-    public class SyncService : IHostedService
+    public class SyncService : IHostedService, ISyncTrigger
     {
         private const int DefaultIntervalHours = 6;
         private const int MaxBackoffMinutes = 30;
@@ -42,6 +42,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _logger.LogInformation("Starting conference sync background service");
             
             _backgroundTask = ExecuteAsync(_cts.Token);
@@ -59,8 +60,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             }
         }
 
-        public Task TriggerSyncAsync(CancellationToken cancellationToken)
+        public Task TriggerSyncAsync(CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _syncTrigger.Release();
             return Task.CompletedTask;
         }
@@ -171,12 +173,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
                     try
                     {
-                        if (!_strmGenerator.StrmFilesExistForConference(conference))
-                        {
-                            await _strmGenerator.CreateStrmFilesForConference(conference, cancellationToken).ConfigureAwait(false);
-                            createdCount++;
-                            _logger.LogInformation("Created strm files for conference: {Conference}", conference.Title);
-                        }
+                        await _strmGenerator.CreateStrmFilesForConference(conference, cancellationToken).ConfigureAwait(false);
+                        createdCount++;
+                        _logger.LogInformation("Processed strm files for conference: {Conference}", conference.Title);
 
                         processedCount++;
                     }

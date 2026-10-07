@@ -330,6 +330,24 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 () => apiClient.GetAsync<TestObject>("invalid"));
         }
 
+        [Fact]
+        public async Task GetEventAsync_accepts_recording_with_null_length()
+        {
+            var json = "{\"guid\":\"event-1\",\"recordings\":[{\"id\":1,\"length\":null,\"width\":null,\"height\":null,\"size\":null,\"recording_url\":\"https://media.example/event-1.mp4\"}]}";
+            var handlerMock = CreateHttpMessageHandlerMock(json, HttpStatusCode.OK);
+            var apiClient = CreateApiClient(handlerMock);
+
+            var result = await apiClient.GetEventAsync("event-1");
+
+            Assert.NotNull(result);
+            var recording = Assert.Single(result.Recordings!);
+            Assert.Null(recording.Length);
+            Assert.Null(recording.Width);
+            Assert.Null(recording.Height);
+            Assert.Null(recording.Size);
+            Assert.Equal("https://media.example/event-1.mp4", recording.EffectiveUrl);
+        }
+
         #endregion
 
         #region Helper Methods
@@ -454,6 +472,63 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Assert.Equal(new DateTime(2024, 8, 15, 12, 30, 45, DateTimeKind.Utc), conference.UpdatedAt.Value.ToUniversalTime());
             Assert.Equal("https://media.ccc.de/c/defcon32", conference.Url);
             Assert.Equal("https://defcon.org/schedule", conference.ScheduleUrl);
+        }
+
+        [Fact]
+        public async Task GetConferences_deserializes_current_wrapped_api_response()
+        {
+            var json = @"{
+                ""conferences"": [
+                    {""title"": ""37C3"", ""acronym"": ""37c3"", ""slug"": ""37c3""}
+                ]
+            }";
+
+            var handlerMock = CreateHttpMessageHandlerMock(json, HttpStatusCode.OK);
+            var httpClient = new HttpClient(handlerMock.Object);
+            var apiClient = CreateApiClient(httpClient);
+
+            // Act
+            var result = await apiClient.GetConferencesAsync();
+
+            // Assert
+            var conference = Assert.Single(result);
+            Assert.Equal("37C3", conference.Title);
+            Assert.Equal("37c3", conference.Acronym);
+        }
+
+        [Fact]
+        public async Task GetEvents_by_conference_identifier_hydrates_recordings()
+        {
+            var handlerMock = new Mock<HttpMessageHandler>();
+            handlerMock.Protected()
+                .SetupSequence<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>())
+                .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(@"{
+                        ""acronym"": ""37c3"",
+                        ""events"": [{""guid"": ""event-1"", ""title"": ""Opening""}]
+                    }")
+                })
+                .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(@"{
+                        ""guid"": ""event-1"",
+                        ""title"": ""Opening"",
+                        ""recordings"": [{""recording_url"": ""https://cdn.example.test/opening.mp4""}]
+                    }")
+                });
+
+            var apiClient = CreateApiClient(new HttpClient(handlerMock.Object));
+
+            var result = await apiClient.GetEventsAsync("37c3");
+
+            var evt = Assert.Single(result);
+            Assert.Equal("event-1", evt.Guid);
+            Assert.Single(evt.Recordings!);
+            Assert.Equal("https://cdn.example.test/opening.mp4", evt.Recordings[0].EffectiveUrl);
         }
 
         [Fact]

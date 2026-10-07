@@ -130,7 +130,19 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                     Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
                 });
 
-                await File.WriteAllTextAsync(filePath, json).ConfigureAwait(false);
+                var tempPath = filePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    await File.WriteAllTextAsync(tempPath, json).ConfigureAwait(false);
+                    File.Move(tempPath, filePath, overwrite: true);
+                }
+                finally
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                    }
+                }
             }
             finally
             {

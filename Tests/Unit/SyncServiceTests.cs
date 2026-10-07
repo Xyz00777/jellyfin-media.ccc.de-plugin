@@ -207,7 +207,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public async Task ExecuteAsync_does_not_duplicate_existing_strm_files()
+        public async Task ExecuteAsync_rechecks_existing_conferences_for_new_strm_files()
         {
             _configuration.SyncIntervalHours = 6;
             
@@ -221,10 +221,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences)
                 .Callback(() => syncCompleted.TrySetResult(true));
-
-            _strmGeneratorMock
-                .Setup(x => x.StrmFilesExistForConference(It.IsAny<ConferenceDto>()))
-                .Returns(true);
 
             var service = CreateService();
 
@@ -242,7 +238,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             _strmGeneratorMock.Verify(
                 x => x.CreateStrmFilesForConference(It.IsAny<ConferenceDto>(), It.IsAny<CancellationToken>()),
-                Times.Never());
+                Times.Once());
 
             await service.StopAsync(CancellationToken.None);
         }

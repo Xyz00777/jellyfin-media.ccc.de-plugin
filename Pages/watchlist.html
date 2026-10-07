@@ -367,7 +367,7 @@
             <div class="queue-info">
                 <span class="queue-count"><strong id="queueCount">0</strong> items in queue</span>
             </div>
-            <button id="triggerSync" class="sync-button" onclick="triggerSync()">
+            <button type="button" id="triggerSync" class="sync-button">
                 ▶ Start Download
             </button>
         </div>
@@ -407,18 +407,19 @@
 
     <script>
         const WatchlistPage = {
-            pluginId: 'e225c91a-ef11-41ca-b913-6491f15c2992',
-            userId: null,
+             pluginId: 'e225c91a-ef11-41ca-b913-6491f15c2992',
+             userId: null,
+             queueItems: [],
 
             init: function() {
-                this.userId = this.getUserId();
+                 this.userId = this.getUserId();
                 if (!this.userId) {
                     console.error('User not authenticated');
                     return;
                 }
 
-                this.loadWatchlist();
-                this.loadQueueStatus();
+                 document.getElementById('triggerSync').addEventListener('click', () => this.triggerSync());
+                 this.loadQueueStatus().then(() => this.loadWatchlist());
             },
 
             getUserId: function() {
@@ -529,30 +530,38 @@
                     </td>
                     <td data-label="Actions">
                         <div class="actions">
-                            ${status.status === 'failed' ? `
-                                <button class="btn btn-retry" onclick="WatchlistPage.retryDownload('${event.guid}')">
-                                    ↻ Retry
-                                </button>
-                            ` : ''}
-                            <button class="btn btn-remove" onclick="WatchlistPage.removeFromWatchlist('${event.guid}')">
-                                ✕ Remove
-                            </button>
+                             ${status.status === 'failed' ? `
+                                 <button class="btn btn-retry" data-action="retry">
+                                     ↻ Retry
+                                 </button>
+                             ` : ''}
+                             <button class="btn btn-remove" data-action="remove">
+                                 ✕ Remove
+                             </button>
                         </div>
                     </td>
                 `;
 
+                const eventGuid = String(event.guid || '');
+                const retryButton = tr.querySelector('[data-action="retry"]');
+                if (retryButton) {
+                    retryButton.addEventListener('click', () => this.retryDownload(eventGuid));
+                }
+                tr.querySelector('[data-action="remove"]').addEventListener('click', () => this.removeFromWatchlist(eventGuid));
                 return tr;
             },
 
             getDownloadStatus: function(eventGuid) {
-                // Placeholder: In real implementation, fetch from download queue
-                // For now, return mock data
-                const statuses = ['pending', 'complete', 'downloading', 'failed'];
-                const status = statuses[Math.floor(Math.random() * statuses.length)];
+                const item = this.queueItems.find(queueItem => queueItem.eventGuid === eventGuid);
+                if (!item) {
+                    return { status: 'pending', progress: 0 };
+                }
 
+                const statusNames = ['Pending', 'InProgress', 'Completed', 'Failed'];
+                const statusName = typeof item.status === 'number' ? statusNames[item.status] : item.status;
                 return {
-                    status: status,
-                    progress: status === 'downloading' ? Math.floor(Math.random() * 100) : 0
+                    status: statusName === 'Completed' ? 'complete' : statusName === 'InProgress' ? 'downloading' : String(statusName).toLowerCase(),
+                    progress: Math.round((item.progress || 0) * 100)
                 };
             },
 
@@ -616,16 +625,17 @@
             },
 
             retryDownload: function(eventGuid) {
-                // Placeholder: Trigger retry
-                console.log('Retrying download for:', eventGuid);
-                alert('Retry functionality will be implemented with download service');
+                this.enqueueDownload(eventGuid);
             },
 
             loadQueueStatus: function() {
-                // Placeholder: In real implementation, fetch from download queue API
-                const queueCount = document.getElementById('queueCount');
-                const tableRows = document.querySelectorAll('#watchlistBody tr');
-                queueCount.textContent = tableRows.length;
+                return fetch(`${ApiClient.serverAddress()}/media_ccc/downloads`, {
+                    headers: { 'Authorization': `MediaBrowser Token="${ApiClient.accessToken()}"` }
+                }).then(response => response.ok ? response.json() : Promise.reject(new Error('Failed to load queue')))
+                    .then(items => {
+                        this.queueItems = items || [];
+                        document.getElementById('queueCount').textContent = String(this.queueItems.filter(item => item.status !== 'Completed').length);
+                    });
             },
 
             triggerSync: function() {
@@ -633,12 +643,25 @@
                 button.disabled = true;
                 button.textContent = '⏳ Syncing...';
 
-                // Placeholder: Trigger download service
-                setTimeout(() => {
-                    button.disabled = false;
-                    button.textContent = '▶ Start Download';
-                    this.loadWatchlist();
-                }, 2000);
+                const eventGuids = Array.from(document.querySelectorAll('#watchlistBody tr'))
+                    .map(row => row.dataset.eventGuid)
+                    .filter(Boolean);
+                Promise.all(eventGuids.map(eventGuid => this.enqueueDownload(eventGuid)))
+                    .finally(() => {
+                        button.disabled = false;
+                        button.textContent = '▶ Start Download';
+                        this.loadQueueStatus().then(() => this.loadWatchlist());
+                    });
+            },
+
+            enqueueDownload: function(eventGuid) {
+                return fetch(`${ApiClient.serverAddress()}/media_ccc/downloads/${encodeURIComponent(eventGuid)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `MediaBrowser Token="${ApiClient.accessToken()}"`,
+                        'Content-Type': 'application/json'
+                    }
+                }).then(response => response.ok ? response.json() : Promise.reject(new Error('Failed to queue download')));
             },
 
             showError: function(message) {
