@@ -757,14 +757,50 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 "Expected error log to include retry/backoff info");
         }
 
-        private SyncService CreateService()
+        private SyncService CreateService(TimeSpan? configRecheckInterval = null)
         {
             return new SyncService(
                 _apiClientMock.Object,
                 _strmGeneratorMock.Object,
                 _syncLoggerMock.Object,
                 () => _configuration,
-                _loggerMock.Object);
+                _loggerMock.Object,
+                configRecheckInterval);
+        }
+
+        [Fact]
+        public async Task RunAsync_reacts_to_a_changed_sync_interval()
+        {
+            _configuration.SyncIntervalHours = 24;
+            _apiClientMock
+                .Setup(a => a.GetConferencesAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new List<ConferenceDto>());
+
+            var service = CreateService(TimeSpan.FromMilliseconds(50));
+
+            await service.StartAsync(CancellationToken.None);
+
+            // A long first interval must not mask a later configuration change.
+            _configuration.SyncIntervalHours = 1;
+            var observed = false;
+            var deadline = DateTime.UtcNow.AddSeconds(20);
+            while (DateTime.UtcNow < deadline && !observed)
+            {
+                observed = _loggerMock.Invocations.Any(i =>
+                    i.Method.Name == nameof(ILogger.Log) &&
+                    i.Arguments.Count > 2 &&
+                    i.Arguments[2]?.ToString()?.Contains("Sync interval changed") == true);
+                if (!observed)
+                {
+                    await Task.Delay(50);
+                }
+            }
+
+            await service.StopAsync(CancellationToken.None);
+
+            Assert.True(
+                observed,
+                "expected the service to notice the new interval instead of waiting out the old one");
         }
     }
 }

@@ -28,7 +28,6 @@ public class ServiceRegistrator : IPluginServiceRegistrator
         });
         
         serviceCollection.AddSingleton<IMediaCccApiClient, MediaCccApi>();
-        serviceCollection.AddSingleton<ILanguageSelector, LanguageSelector>();
         serviceCollection.AddSingleton<IRecordingSelector, RecordingSelector>();
         serviceCollection.AddSingleton<IStrmGenerator>(sp =>
         {
@@ -43,12 +42,14 @@ public class ServiceRegistrator : IPluginServiceRegistrator
             var recordingSelector = sp.GetRequiredService<IRecordingSelector>();
             return new StrmFileGeneratorAdapter(recordingSelector);
         });
-        serviceCollection.AddSingleton<StrmTreeGenerator>();
         serviceCollection.AddSingleton<ISyncLogger, SyncLogger>();
         serviceCollection.AddSingleton<IUserDataManager, UserDataManager>();
         serviceCollection.AddSingleton<IUserLibraryService, UserLibraryService>();
         serviceCollection.AddSingleton<IDownloadQueue, DownloadQueue>();
         serviceCollection.AddSingleton<IFileService, FileService>();
+        serviceCollection.AddSingleton<IWatchlistDownloadService, WatchlistDownloadService>();
+        serviceCollection.AddSingleton<SyncService>();
+        serviceCollection.AddSingleton<ISyncTrigger>(sp => sp.GetRequiredService<SyncService>());
         
         serviceCollection.AddSingleton<Func<PluginConfiguration>>(sp =>
         {
@@ -56,8 +57,9 @@ public class ServiceRegistrator : IPluginServiceRegistrator
             return () => plugin.Configuration;
         });
 
+        serviceCollection.AddHostedService<PluginDataInitializationService>();
         serviceCollection.AddHostedService<LibrarySetupService>();
-        serviceCollection.AddHostedService<SyncService>();
+        serviceCollection.AddHostedService(sp => sp.GetRequiredService<SyncService>());
         serviceCollection.AddHostedService<DownloadService>();
     }
 }

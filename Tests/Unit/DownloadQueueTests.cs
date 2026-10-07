@@ -240,6 +240,38 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
+        public async Task LoadAsync_requeues_items_left_InProgress_by_a_previous_process()
+        {
+            var item = CreateTestItem();
+            await _queue.EnqueueAsync(item);
+            await _queue.MarkInProgressAsync(item.Id);
+
+            var reloaded = new DownloadQueue(_applicationPathsMock.Object, _loggerMock.Object);
+
+            var recovered = await reloaded.GetItemAsync(item.Id);
+            Assert.NotNull(recovered);
+            Assert.Equal(DownloadStatus.Pending, recovered!.Status);
+            Assert.Equal(0, recovered.Progress);
+
+            var dequeued = await reloaded.DequeueAsync();
+            Assert.NotNull(dequeued);
+        }
+
+        [Fact]
+        public async Task LoadAsync_keeps_completed_items_completed()
+        {
+            var item = CreateTestItem();
+            await _queue.EnqueueAsync(item);
+            await _queue.MarkCompletedAsync(item.Id);
+
+            var reloaded = new DownloadQueue(_applicationPathsMock.Object, _loggerMock.Object);
+
+            var restored = await reloaded.GetItemAsync(item.Id);
+            Assert.NotNull(restored);
+            Assert.Equal(DownloadStatus.Completed, restored!.Status);
+        }
+
+        [Fact]
         public void Queue_handles_corrupt_json_gracefully()
         {
             var filePath = Path.Combine(
@@ -379,6 +411,39 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             Assert.False(File.Exists(tempFile));
             Assert.True(File.Exists(filePath));
+        }
+
+        [Fact]
+        public async Task ReportProgress_updates_memory_without_persisting()
+        {
+            var item = CreateTestItem();
+            await _queue.EnqueueAsync(item);
+
+            _queue.ReportProgress(item.Id, 0.42);
+
+            var stored = await _queue.GetItemAsync(item.Id);
+            Assert.NotNull(stored);
+            Assert.Equal(0.42, stored!.Progress);
+        }
+
+        [Fact]
+        public void ReportProgress_ignores_unknown_item()
+        {
+            var exception = Record.Exception(() => _queue.ReportProgress(Guid.NewGuid(), 0.5));
+
+            Assert.Null(exception);
+        }
+
+        [Fact]
+        public async Task GetUserQueueAsync_returns_snapshots_not_live_items()
+        {
+            var item = CreateTestItem();
+            await _queue.EnqueueAsync(item);
+
+            var first = (await _queue.GetUserQueueAsync(item.UserId)).Single();
+            await _queue.UpdateProgressAsync(item.Id, 0.9);
+
+            Assert.Equal(0, first.Progress);
         }
 
         #endregion

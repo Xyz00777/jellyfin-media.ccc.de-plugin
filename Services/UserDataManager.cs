@@ -18,7 +18,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private readonly ILogger<UserDataManager> _logger;
         private readonly object _lock = new object();
         private readonly Dictionary<Guid, UserData> _cache = new Dictionary<Guid, UserData>();
-        private readonly ConcurrentDictionary<Guid, Task> _loads = new ConcurrentDictionary<Guid, Task>();
+        private readonly ConcurrentDictionary<Guid, Lazy<Task>> _loads = new ConcurrentDictionary<Guid, Lazy<Task>>();
         private readonly SemaphoreSlim _persistLock = new SemaphoreSlim(1, 1);
 
         public UserDataManager(IApplicationPaths applicationPaths, ILogger<UserDataManager> logger)
@@ -64,16 +64,19 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             }
         }
 
-        public void AddToWatchlist(Guid userId, string eventGuid)
+        public bool AddToWatchlistIfMissing(Guid userId, string eventGuid)
         {
             lock (_lock)
             {
                 var userData = GetOrCreateUserData(userId);
 
-                if (userData.Watchlist.Add(eventGuid))
+                if (!userData.Watchlist.Add(eventGuid))
                 {
-                    userData.UpdatedAt = DateTime.UtcNow;
+                    return false;
                 }
+
+                userData.UpdatedAt = DateTime.UtcNow;
+                return true;
             }
         }
 
@@ -234,9 +237,28 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             }
         }
 
-        public Task EnsureLoadedAsync(Guid userId)
+        public async Task EnsureLoadedAsync(Guid userId)
         {
-            return _loads.GetOrAdd(userId, LoadAsync);
+            // GetOrAdd can invoke its value factory more than once, so wrap the load in a
+            // Lazy to guarantee a single execution; duplicate loads could otherwise
+            // overwrite a concurrent mutation with stale file contents.
+            var load = _loads
+                .GetOrAdd(
+                    userId,
+                    id => new Lazy<Task>(() => LoadAsync(id), LazyThreadSafetyMode.ExecutionAndPublication))
+                .Value;
+
+            try
+            {
+                await load.ConfigureAwait(false);
+            }
+            catch
+            {
+                // Keep the single-flight task cached only while it is healthy; a faulted
+                // task would otherwise be replayed for this user on every later request.
+                _loads.TryRemove(userId, out _);
+                throw;
+            }
         }
 
         public async Task LoadAsync(Guid userId)

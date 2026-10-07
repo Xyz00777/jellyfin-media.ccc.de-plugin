@@ -30,7 +30,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public void ServiceRegistrator_registers_SyncService_as_HostedService()
+        public void ServiceRegistrator_registers_SyncService_as_singleton_and_hosted_service()
         {
             var serviceCollection = new ServiceCollection();
             var applicationHostMock = new Mock<IServerApplicationHost>();
@@ -38,10 +38,65 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
 
-            var descriptor = serviceCollection.FirstOrDefault(s =>
-                s.ServiceType == typeof(IHostedService) &&
-                s.ImplementationType == typeof(SyncService));
+            var singleton = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(SyncService));
+            Assert.NotNull(singleton);
+            Assert.Equal(ServiceLifetime.Singleton, singleton.Lifetime);
+
+            // The hosted service must reuse that singleton, otherwise the injected
+            // ISyncTrigger would be a second, non-running SyncService instance.
+            var hosted = serviceCollection.FirstOrDefault(s =>
+                s.ServiceType == typeof(IHostedService) && s.ImplementationFactory != null);
+            Assert.NotNull(hosted);
+        }
+
+        [Fact]
+        public void ServiceRegistrator_registers_ISyncTrigger()
+        {
+            var serviceCollection = new ServiceCollection();
+            var applicationHostMock = new Mock<IServerApplicationHost>();
+            var registrator = new ServiceRegistrator();
+
+            registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
+
+            var descriptor = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(ISyncTrigger));
             Assert.NotNull(descriptor);
+            Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
+        }
+
+        [Fact]
+        public void ServiceRegistrator_registers_PluginDataInitializationService_first()
+        {
+            var serviceCollection = new ServiceCollection();
+            var applicationHostMock = new Mock<IServerApplicationHost>();
+            var registrator = new ServiceRegistrator();
+
+            registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
+
+            // SyncLogger keeps history in memory and only reads it from disk in
+            // LoadAsync, which this hosted service is the sole caller of. If it is
+            // missing, sync history is empty after every server restart.
+            var hosted = serviceCollection
+                .Where(s => s.ServiceType == typeof(IHostedService))
+                .ToList();
+
+            Assert.NotEmpty(hosted);
+            Assert.Contains(
+                hosted,
+                s => s.ImplementationType == typeof(PluginDataInitializationService));
+        }
+
+        [Fact]
+        public void ServiceRegistrator_registers_IWatchlistDownloadService()
+        {
+            var serviceCollection = new ServiceCollection();
+            var applicationHostMock = new Mock<IServerApplicationHost>();
+            var registrator = new ServiceRegistrator();
+
+            registrator.RegisterServices(serviceCollection, applicationHostMock.Object);
+
+            var descriptor = serviceCollection.FirstOrDefault(s => s.ServiceType == typeof(IWatchlistDownloadService));
+            Assert.NotNull(descriptor);
+            Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
         }
 
         [Fact]

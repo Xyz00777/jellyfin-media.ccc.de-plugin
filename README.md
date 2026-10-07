@@ -15,13 +15,15 @@ A Jellyfin plugin that integrates media.ccc.de conference recordings into your J
 
 | Plugin version | Jellyfin | .NET  |
 |----------------|----------|-------|
-| 1.1.0          | 12.0+    | 10.0  |
+| 1.1.0          | 12.2+    | 10.0  |
 
 Plugin 1.1.0 is built against the Jellyfin 12 API and **requires Jellyfin 12.2 or
 newer**. Jellyfin 10.11 is not supported by this version, because Jellyfin 12
 requires .NET 10 and the plugin is compiled against the 12.x API surface. Older
-servers will report the plugin as unsupported and refuse to load it. Use plugin
-version 1.0.1 if you must stay on Jellyfin 10.11.
+servers will report the plugin as unsupported and refuse to load it. To stay on
+Jellyfin 10.11 you must build the plugin against `Jellyfin.Controller` 10.11.x
+with `TargetFramework` `net9.0`; no such build is published, so build it from
+source.
 
 `targetAbi` in `meta.json` must stay in sync with the `Jellyfin.Controller`
 package version in the `.csproj`. The plugin is compiled against version
@@ -36,10 +38,13 @@ version, not just lowering `targetAbi`.
 
 ### From Release
 
-1. Download the latest release ZIP file
+No release artifacts are published yet, so build the plugin from source (below)
+and install the resulting ZIP.
+
+1. Build the plugin and package it: `./build.sh release`
 2. Go to Jellyfin Dashboard > Plugins
 3. Click the gear icon > Repositories
-4. Add repository and upload the ZIP
+4. Add repository and upload `dist/media-ccc-de-plugin-<version>.zip`
 5. Restart Jellyfin
 
 ### From Source

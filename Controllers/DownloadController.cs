@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Models;
@@ -26,7 +25,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(typeof(IReadOnlyList<DownloadQueueItem>), 200)]
         public async Task<IActionResult> GetDownloads()
         {
-            var userId = GetUserGuid();
+            var userId = User.GetUserId();
             if (userId == null)
             {
                 return Unauthorized();
@@ -41,7 +40,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(404)]
         public async Task<IActionResult> EnqueueDownload(string eventGuid, CancellationToken cancellationToken)
         {
-            var userId = GetUserGuid();
+            var userId = User.GetUserId();
             if (userId == null)
             {
                 return Unauthorized();
@@ -56,12 +55,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
                 .EnqueueAsync(userId.Value, eventGuid, cancellationToken)
                 .ConfigureAwait(false);
             return item == null ? NotFound(new { error = "Event or recording not found" }) : Accepted(item);
-        }
-
-        private Guid? GetUserGuid()
-        {
-            var claim = User.FindFirst(ClaimTypes.NameIdentifier);
-            return claim != null && Guid.TryParse(claim.Value, out var userId) ? userId : null;
         }
     }
 }

@@ -15,6 +15,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
     {
         private const int DefaultIntervalHours = 6;
         private const int MaxBackoffMinutes = 30;
+        private static readonly TimeSpan ConfigRecheckInterval = TimeSpan.FromMinutes(1);
+        private readonly TimeSpan _configRecheckInterval;
 
         private readonly IMediaCccApiClient _apiClient;
         private readonly IStrmGenerator _strmGenerator;
@@ -31,13 +33,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             IStrmGenerator strmGenerator,
             ISyncLogger syncLogger,
             Func<PluginConfiguration> configurationProvider,
-            ILogger<SyncService> logger)
+            ILogger<SyncService> logger,
+            TimeSpan? configRecheckInterval = null)
         {
             _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
             _strmGenerator = strmGenerator ?? throw new ArgumentNullException(nameof(strmGenerator));
             _syncLogger = syncLogger ?? throw new ArgumentNullException(nameof(syncLogger));
             _configurationProvider = configurationProvider ?? throw new ArgumentNullException(nameof(configurationProvider));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _configRecheckInterval = configRecheckInterval ?? ConfigRecheckInterval;
         }
 
         public Task StartAsync(CancellationToken cancellationToken)
@@ -124,19 +128,39 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
                 try
                 {
-                    var delay = TimeSpan.FromHours(intervalHours);
-                    var maxDelay = TimeSpan.FromMilliseconds(int.MaxValue);
-                    if (delay > maxDelay)
-                    {
-                        delay = maxDelay;
-                    }
+                    var deadline = DateTime.UtcNow + ClampDelay(TimeSpan.FromHours(intervalHours));
 
-                    var triggered = await _syncTrigger.WaitAsync(
-                        delay, cancellationToken).ConfigureAwait(false);
-
-                    if (triggered)
+                    while (true)
                     {
-                        while (_syncTrigger.Wait(TimeSpan.Zero)) { }
+                        // Wait in short slices and re-read the configuration so an admin
+                        // change takes effect without waiting out the previous interval.
+                        var configured = _configurationProvider().SyncIntervalHours;
+                        if (configured > 0 && configured != intervalHours)
+                        {
+                            _logger.LogInformation(
+                                "Sync interval changed from {Old} to {New} hours",
+                                intervalHours,
+                                configured);
+                            intervalHours = configured;
+                            deadline = DateTime.UtcNow + ClampDelay(TimeSpan.FromHours(configured));
+                            _logger.LogInformation("Next sync in {Interval} hours", intervalHours);
+                        }
+
+                        var remaining = deadline - DateTime.UtcNow;
+                        if (remaining <= TimeSpan.Zero)
+                        {
+                            break;
+                        }
+
+                        var slice = remaining < _configRecheckInterval ? remaining : _configRecheckInterval;
+                        var triggered = await _syncTrigger.WaitAsync(
+                            slice, cancellationToken).ConfigureAwait(false);
+
+                        if (triggered)
+                        {
+                            while (_syncTrigger.Wait(TimeSpan.Zero)) { }
+                            break;
+                        }
                     }
                 }
                 catch (OperationCanceledException)
@@ -144,6 +168,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                     break;
                 }
             }
+        }
+
+        private static TimeSpan ClampDelay(TimeSpan delay)
+        {
+            var maxDelay = TimeSpan.FromMilliseconds(int.MaxValue);
+            return delay > maxDelay ? maxDelay : delay;
         }
 
         private async Task SyncConferencesAsync(CancellationToken cancellationToken)

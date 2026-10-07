@@ -129,7 +129,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
                     try
                     {
-                        _queue.UpdateProgressAsync(item.Id, p).GetAwaiter().GetResult();
+                        _queue.ReportProgress(item.Id, p);
                         lastPersistedProgress = p;
                     }
                     catch (Exception ex)

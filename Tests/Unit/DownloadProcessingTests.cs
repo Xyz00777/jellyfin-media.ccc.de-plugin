@@ -415,9 +415,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 .Returns(Task.CompletedTask);
             
             _queueMock
-                .Setup(x => x.UpdateProgressAsync(item.Id, It.IsAny<double>()))
-                .Callback<Guid, double>((id, progress) => progressValues.Add(progress))
-                .Returns(Task.CompletedTask);
+                .Setup(x => x.ReportProgress(item.Id, It.IsAny<double>()))
+                .Callback<Guid, double>((id, progress) => progressValues.Add(progress));
             
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
@@ -445,7 +444,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert - Progress should be updated multiple times
             _queueMock.Verify(
-                x => x.UpdateProgressAsync(item.Id, It.IsAny<double>()),
+                x => x.ReportProgress(item.Id, It.IsAny<double>()),
                 Times.AtLeast(2));
         }
 

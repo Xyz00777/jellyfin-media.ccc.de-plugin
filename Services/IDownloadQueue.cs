@@ -51,6 +51,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         Task UpdateProgressAsync(Guid id, double progress);
 
         /// <summary>
+        /// Updates progress in memory only, without persisting. Safe to call from a
+        /// synchronous progress callback; the terminal state is persisted by
+        /// <see cref="MarkCompletedAsync"/> or <see cref="MarkFailedAsync"/>.
+        /// </summary>
+        /// <param name="id">Queue item id.</param>
+        /// <param name="progress">Progress between 0.0 and 1.0.</param>
+        void ReportProgress(Guid id, double progress);
+
+        /// <summary>
         /// Gets the total number of items in the queue.
         /// </summary>
         Task<int> GetQueueLengthAsync();

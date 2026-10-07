@@ -195,6 +195,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             }
 
             ValidateUrl(url);
+            cancellationToken.ThrowIfCancellationRequested();
+            await RemoteUrlValidator.ValidatePublicHttpsUrlAsync(url, cancellationToken).ConfigureAwait(false);
 
             var httpClient = _httpClientFactory.CreateClient(HttpClientName);
             var request = new HttpRequestMessage(HttpMethod.Head, url);

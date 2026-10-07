@@ -119,7 +119,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             List<DownloadQueueItem> items;
             lock (_lock)
             {
-                items = _queue.Values.Where(i => i.UserId == userId).ToList();
+                items = _queue.Values.Where(i => i.UserId == userId).Select(i => i.Copy()).ToList();
             }
             return items;
         }
@@ -185,6 +185,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             await PersistAsync().ConfigureAwait(false);
         }
 
+        public void ReportProgress(Guid id, double progress)
+        {
+            lock (_lock)
+            {
+                if (_queue.TryGetValue(id, out var item))
+                {
+                    item.Progress = progress;
+                    item.UpdatedAt = DateTime.UtcNow;
+                }
+            }
+        }
+
         public async Task<int> GetQueueLengthAsync()
         {
             await EnsureInitializedAsync().ConfigureAwait(false);
@@ -211,29 +223,29 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
         private async Task PersistAsync()
         {
-            string filePath;
-            List<DownloadQueueItem> snapshot;
-            lock (_lock)
-            {
-                filePath = GetFilePath();
-                snapshot = _queue.Values.ToList();
-            }
-
-            var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
-            {
-                WriteIndented = true,
-                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-            });
-
-            var directory = Path.GetDirectoryName(filePath);
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
             await _persistLock.WaitAsync().ConfigureAwait(false);
             try
             {
+                string filePath;
+                List<DownloadQueueItem> snapshot;
+                lock (_lock)
+                {
+                    filePath = GetFilePath();
+                    snapshot = _queue.Values.ToList();
+                }
+
+                var json = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+                });
+
+                var directory = Path.GetDirectoryName(filePath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
                 var tempPath = filePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 try
                 {
@@ -280,6 +292,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                     {
                         foreach (var item in items)
                         {
+                            // A previous process may have stopped mid-download, leaving
+                            // items stuck InProgress. Nothing owns them any more, so make
+                            // them eligible again instead of stranding the user's download.
+                            if (item.Status == DownloadStatus.InProgress)
+                            {
+                                item.Status = DownloadStatus.Pending;
+                                item.Progress = 0;
+                                item.UpdatedAt = DateTime.UtcNow;
+                            }
+
                             _queue[item.Id] = item;
                         }
                     }

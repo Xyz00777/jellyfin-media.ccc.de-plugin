@@ -20,18 +20,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
     {
         private readonly ILogger<SyncController> _logger;
         private readonly ISyncLogger _syncLogger;
-        private readonly ISyncTrigger? _syncTrigger;
+        private readonly ISyncTrigger _syncTrigger;
 
         public SyncController(
             ILogger<SyncController> logger,
             ISyncLogger syncLogger,
             IMediaCccApiClient apiClient,
-            ISyncTrigger? syncTrigger = null)
+            ISyncTrigger syncTrigger)
         {
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             _syncLogger = syncLogger ?? throw new ArgumentNullException(nameof(syncLogger));
             _ = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
-            _syncTrigger = syncTrigger;
+            _syncTrigger = syncTrigger ?? throw new ArgumentNullException(nameof(syncTrigger));
         }
 
         [HttpPost("trigger")]
@@ -41,10 +41,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         public async Task<IActionResult> TriggerSync(CancellationToken cancellationToken = default)
         {
             _logger.LogInformation("Manual sync triggered by user");
-            if (_syncTrigger != null)
-            {
-                await _syncTrigger.TriggerSyncAsync(cancellationToken).ConfigureAwait(false);
-            }
+            await _syncTrigger.TriggerSyncAsync(cancellationToken).ConfigureAwait(false);
             return Accepted();
         }
 

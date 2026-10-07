@@ -28,6 +28,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Api
         private readonly IHttpClientFactory _httpClientFactory;
         private const string BaseUrl = "https://api.media.ccc.de/public/";
         private const string HttpClientName = "MediaCccApi";
+        private const int DefaultRecentEvents = 50;
+        private const int MaxRecentEvents = 200;
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             PropertyNameCaseInsensitive = true,
@@ -146,7 +148,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Api
                 throw new ArgumentOutOfRangeException(nameof(limit), "Limit cannot be negative.");
             }
 
-            var endpoint = limit.HasValue ? $"events/recent?limit={limit.Value}" : "events/recent";
+            // Every returned event may trigger a hydration request upstream, so an
+            // unbounded page would fan out into an unbounded number of HTTP calls.
+            var effectiveLimit = limit.HasValue
+                ? Math.Min(limit.Value, MaxRecentEvents)
+                : DefaultRecentEvents;
+
+            var endpoint = $"events/recent?limit={effectiveLimit}";
             var httpClient = _httpClientFactory.CreateClient(HttpClientName);
             var payload = await GetAsyncInternal<JsonElement>(httpClient, endpoint, cancellationToken).ConfigureAwait(false);
             var shouldHydrate = payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("events", out _);
@@ -166,11 +174,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Api
             var sorted = result
                 .OrderByDescending(e => ParseDate(e.Date) ?? DateTimeOffset.MinValue)
                 .ToArray();
-            
-            // Apply limit locally as well
-            if (limit.HasValue && sorted.Length > limit.Value)
+
+            if (sorted.Length > effectiveLimit)
             {
-                sorted = sorted.Take(limit.Value).ToArray();
+                sorted = sorted.Take(effectiveLimit).ToArray();
             }
 
             return sorted;

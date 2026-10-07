@@ -213,7 +213,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var eventGuid = "event-123";
 
             // Act
-            userDataManager.AddToWatchlist(userId, eventGuid);
+            userDataManager.AddToWatchlistIfMissing(userId, eventGuid);
 
             // Assert
             var watchlist = userDataManager.GetWatchlist(userId);
@@ -230,8 +230,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var eventGuid = "event-123";
 
             // Act - Add same event twice
-            userDataManager.AddToWatchlist(userId, eventGuid);
-            userDataManager.AddToWatchlist(userId, eventGuid);
+            userDataManager.AddToWatchlistIfMissing(userId, eventGuid);
+            userDataManager.AddToWatchlistIfMissing(userId, eventGuid);
 
             // Assert
             var watchlist = userDataManager.GetWatchlist(userId);
@@ -247,8 +247,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var eventGuid1 = "event-123";
             var eventGuid2 = "event-456";
 
-            userDataManager.AddToWatchlist(userId, eventGuid1);
-            userDataManager.AddToWatchlist(userId, eventGuid2);
+            userDataManager.AddToWatchlistIfMissing(userId, eventGuid1);
+            userDataManager.AddToWatchlistIfMissing(userId, eventGuid2);
 
             // Act
             userDataManager.RemoveFromWatchlist(userId, eventGuid1);
@@ -286,7 +286,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Assert.False(userDataManager.IsOnWatchlist(userId, eventGuid));
 
             // Add and check again
-            userDataManager.AddToWatchlist(userId, eventGuid);
+            userDataManager.AddToWatchlistIfMissing(userId, eventGuid);
             Assert.True(userDataManager.IsOnWatchlist(userId, eventGuid));
         }
 
@@ -311,9 +311,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var userDataManager = CreateUserDataManager();
             var userId = Guid.NewGuid();
 
-            userDataManager.AddToWatchlist(userId, "event-3");
-            userDataManager.AddToWatchlist(userId, "event-1");
-            userDataManager.AddToWatchlist(userId, "event-2");
+            userDataManager.AddToWatchlistIfMissing(userId, "event-3");
+            userDataManager.AddToWatchlistIfMissing(userId, "event-1");
+            userDataManager.AddToWatchlistIfMissing(userId, "event-2");
 
             var watchlist = userDataManager.GetWatchlist(userId);
 
@@ -489,7 +489,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 {
                     for (int j = 0; j < 10; j++)
                     {
-                        userDataManager.AddToWatchlist(userId, $"event-{index}-{j}");
+                        userDataManager.AddToWatchlistIfMissing(userId, $"event-{index}-{j}");
                         userDataManager.MarkAsSearched(userId, $"event-{index}-{j}");
                     }
                 }));
@@ -517,7 +517,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 var index = i;
                 tasks.Add(Task.Run(() =>
                 {
-                    userDataManager.AddToWatchlist(userId, $"event-{index}");
+                    userDataManager.AddToWatchlistIfMissing(userId, $"event-{index}");
                 }));
                 
                 tasks.Add(Task.Run(() =>
@@ -627,7 +627,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var userDataManager = CreateUserDataManager();
             var userId = Guid.NewGuid();
 
-            userDataManager.AddToWatchlist(userId, "event-1");
+            userDataManager.AddToWatchlistIfMissing(userId, "event-1");
 
             // Act
             await userDataManager.PersistAsync(userId);
@@ -653,7 +653,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var beforeSave = DateTime.UtcNow;
 
             // Act
-            userDataManager.AddToWatchlist(userId, "event-1");
+            userDataManager.AddToWatchlistIfMissing(userId, "event-1");
 
             // Assert
             var userData = userDataManager.GetUserData(userId);
@@ -668,10 +668,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var userDataManager = CreateUserDataManager();
             var userId = Guid.NewGuid();
 
-            userDataManager.AddToWatchlist(userId, "event-1");
+            userDataManager.AddToWatchlistIfMissing(userId, "event-1");
             var firstUpdate = userDataManager.GetUserData(userId).UpdatedAt;
 
-            userDataManager.AddToWatchlist(userId, "event-2");
+            userDataManager.AddToWatchlistIfMissing(userId, "event-2");
             var secondUpdate = userDataManager.GetUserData(userId).UpdatedAt;
 
             Assert.True(secondUpdate >= firstUpdate);
@@ -768,13 +768,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             for (int i = 0; i < 100; i++)
             {
-                userDataManager.AddToWatchlist(userId, $"event-{i}");
+                userDataManager.AddToWatchlistIfMissing(userId, $"event-{i}");
             }
 
             var persistTask = userDataManager.PersistAsync(userId);
             for (int i = 100; i < 200; i++)
             {
-                userDataManager.AddToWatchlist(userId, $"event-{i}");
+                userDataManager.AddToWatchlistIfMissing(userId, $"event-{i}");
             }
             await persistTask;
 
@@ -804,7 +804,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 {
                     for (int j = 0; j < 10; j++)
                     {
-                        userDataManager.AddToWatchlist(userId, $"event-{index}-{j}");
+                        userDataManager.AddToWatchlistIfMissing(userId, $"event-{index}-{j}");
                     }
                     await userDataManager.PersistAsync(userId);
                 }));
@@ -854,7 +854,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var userDataManager = CreateUserDataManager();
             var userId = Guid.NewGuid();
 
-            userDataManager.AddToWatchlist(userId, "event-1");
+            userDataManager.AddToWatchlistIfMissing(userId, "event-1");
             await userDataManager.PersistAsync(userId);
 
             var filePath = Path.Combine(_testDataPath, "plugins", "ccc-media", "data", $"user-{userId}.json");
@@ -881,6 +881,56 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             return new UserDataManager(
                 _applicationPathsMock.Object,
                 _loggerMock.Object);
+        }
+
+        [Fact]
+        public void AddToWatchlistIfMissing_returns_true_then_false()
+        {
+            var userDataManager = CreateUserDataManager();
+            var userId = Guid.NewGuid();
+
+            Assert.True(userDataManager.AddToWatchlistIfMissing(userId, "event-atomic"));
+            Assert.False(userDataManager.AddToWatchlistIfMissing(userId, "event-atomic"));
+            Assert.Single(userDataManager.GetWatchlist(userId));
+        }
+
+        [Fact]
+        public void AddToWatchlistIfMissing_is_scoped_per_user()
+        {
+            var userDataManager = CreateUserDataManager();
+            var first = Guid.NewGuid();
+            var second = Guid.NewGuid();
+
+            Assert.True(userDataManager.AddToWatchlistIfMissing(first, "shared-event"));
+            Assert.True(userDataManager.AddToWatchlistIfMissing(second, "shared-event"));
+
+            Assert.Single(userDataManager.GetWatchlist(first));
+            Assert.Single(userDataManager.GetWatchlist(second));
+        }
+
+        [Fact]
+        public async Task EnsureLoadedAsync_runs_the_load_only_once_under_concurrency()
+        {
+            var userDataManager = CreateUserDataManager();
+            var userId = Guid.NewGuid();
+
+            await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => userDataManager.EnsureLoadedAsync(userId)));
+
+            Assert.True(userDataManager.AddToWatchlistIfMissing(userId, "event-concurrent"));
+            Assert.Single(userDataManager.GetWatchlist(userId));
+        }
+
+        [Fact]
+        public async Task EnsureLoadedAsync_retries_after_a_failed_load()
+        {
+            var userDataManager = CreateUserDataManager();
+            var userId = Guid.NewGuid();
+
+            await userDataManager.EnsureLoadedAsync(userId);
+            await userDataManager.EnsureLoadedAsync(userId);
+            await userDataManager.EnsureLoadedAsync(userId);
+
+            Assert.NotNull(userDataManager.GetWatchlist(userId));
         }
 
         #endregion

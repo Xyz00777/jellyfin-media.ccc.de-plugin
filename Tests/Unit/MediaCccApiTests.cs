@@ -1216,7 +1216,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert
             Assert.NotNull(capturedUri);
-            Assert.Equal("https://api.media.ccc.de/public/events/recent", capturedUri!.ToString());
+            Assert.Equal(
+                "https://api.media.ccc.de/public/events/recent?limit=50",
+                capturedUri!.ToString());
         }
 
         [Fact]
@@ -1310,7 +1312,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public async Task GetRecent_without_limit_does_not_add_query_parameter()
+        public async Task GetRecent_without_limit_applies_default_page_size()
         {
             // Arrange
             Uri? capturedUri = null;
@@ -1332,10 +1334,37 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Act
             await apiClient.GetRecentAsync();
 
+            // Assert - unbounded pages would fan out into one hydration request per event
+            Assert.NotNull(capturedUri);
+            Assert.Equal("https://api.media.ccc.de/public/events/recent?limit=50", capturedUri!.ToString());
+        }
+
+        [Fact]
+        public async Task GetRecent_clamps_limit_to_maximum()
+        {
+            // Arrange
+            Uri? capturedUri = null;
+            var handlerMock = new Mock<HttpMessageHandler>();
+            handlerMock.Protected()
+                .Setup<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>())
+                .Callback<HttpRequestMessage, CancellationToken>((req, _) => capturedUri = req.RequestUri)
+                .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("[]")
+                });
+
+            var httpClient = new HttpClient(handlerMock.Object) { BaseAddress = new Uri(BaseUrl) };
+            var apiClient = CreateApiClient(httpClient);
+
+            // Act
+            await apiClient.GetRecentAsync(100000);
+
             // Assert
             Assert.NotNull(capturedUri);
-            Assert.Equal("https://api.media.ccc.de/public/events/recent", capturedUri!.ToString());
-            Assert.DoesNotContain("limit", capturedUri.Query);
+            Assert.Equal("https://api.media.ccc.de/public/events/recent?limit=200", capturedUri!.ToString());
         }
 
         #endregion

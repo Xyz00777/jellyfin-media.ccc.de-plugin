@@ -21,19 +21,24 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         void SaveUserData(Guid userId, UserData data);
 
         /// <summary>
-        /// Adds an event to the user's watchlist.
-        /// </summary>
-        void AddToWatchlist(Guid userId, string eventGuid);
-
-        /// <summary>
         /// Removes an event from the user's watchlist.
         /// </summary>
+        /// <param name="userId">User id.</param>
+        /// <param name="eventGuid">Event GUID to remove.</param>
         void RemoveFromWatchlist(Guid userId, string eventGuid);
 
         /// <summary>
         /// Checks if an event is on the user's watchlist.
         /// </summary>
         bool IsOnWatchlist(Guid userId, string eventGuid);
+
+        /// <summary>
+        /// Atomically adds an event to the watchlist if it is not already present.
+        /// </summary>
+        /// <param name="userId">User id.</param>
+        /// <param name="eventGuid">Event GUID to add.</param>
+        /// <returns>True when the event was added, false when it was already present.</returns>
+        bool AddToWatchlistIfMissing(Guid userId, string eventGuid);
 
         /// <summary>
         /// Marks an event as searched.

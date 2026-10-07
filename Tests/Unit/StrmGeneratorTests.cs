@@ -54,6 +54,23 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
+        public async Task GenerateStrm_leaves_no_temporary_files_behind()
+        {
+            var conference = CreateConference("37c3", "37C3");
+            var evt = CreateEvent("opening-ceremony", "Opening Ceremony");
+            var recording = CreateRecording("https://example.com/video.mp4");
+
+            _recordingSelectorMock
+                .Setup(r => r.SelectBestRecording(It.IsAny<IEnumerable<Recording>>(), It.IsAny<RecordingPreferences>()))
+                .Returns(recording);
+
+            var result = await _strmGenerator.GenerateStrmAsync(conference, evt, CancellationToken.None);
+
+            var directory = Path.GetDirectoryName(result.FilePath)!;
+            Assert.Empty(Directory.GetFiles(directory, "*.tmp"));
+        }
+
+        [Fact]
         public async Task GenerateStrm_uses_conference_name_for_directory()
         {
             // Arrange

@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Security.Claims;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Api;
@@ -171,7 +171,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(400)]
         public async Task<IActionResult> AddToWatchlist(string eventGuid)
         {
-            var userId = GetUserGuid();
+            var userId = User.GetUserId();
             if (userId == null)
             {
                 return Unauthorized();
@@ -184,12 +184,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
                 return BadRequest(new { error = "Event GUID cannot be empty" });
             }
 
-            if (_userDataManager.IsOnWatchlist(userId.Value, eventGuid))
+            if (!_userDataManager.AddToWatchlistIfMissing(userId.Value, eventGuid))
             {
                 return Ok(); // Already on watchlist, idempotent
             }
 
-            _userDataManager.AddToWatchlist(userId.Value, eventGuid);
             await _userDataManager.PersistAsync(userId.Value).ConfigureAwait(false);
             
             return Ok();
@@ -206,7 +205,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(400)]
         public async Task<IActionResult> RemoveFromWatchlist(string eventGuid)
         {
-            var userId = GetUserGuid();
+            var userId = User.GetUserId();
             if (userId == null)
             {
                 return Unauthorized();
@@ -234,7 +233,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(401)]
         public async Task<IActionResult> GetWatchlist()
         {
-            var userId = GetUserGuid();
+            var userId = User.GetUserId();
             if (userId == null)
             {
                 return Unauthorized();
@@ -255,7 +254,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(401)]
         public async Task<IActionResult> GetPreferredAudioLanguages()
         {
-            var userId = GetUserGuid();
+            var userId = User.GetUserId();
             if (userId == null)
             {
                 return Unauthorized();
@@ -278,7 +277,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(400)]
         public async Task<IActionResult> SetPreferredAudioLanguages([FromBody] List<string> languages)
         {
-            var userId = GetUserGuid();
+            var userId = User.GetUserId();
             if (userId == null)
             {
                 return Unauthorized();
@@ -286,12 +285,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
 
             await _userDataManager.EnsureLoadedAsync(userId.Value).ConfigureAwait(false);
 
-            if (languages == null)
+            if (!TryNormalizeLanguages(languages, out var normalized, out var error))
             {
-                return BadRequest(new { error = "Languages list cannot be null" });
+                return BadRequest(new { error });
             }
 
-            _userDataManager.SetPreferredAudioLanguages(userId.Value, languages);
+            _userDataManager.SetPreferredAudioLanguages(userId.Value, normalized);
             await _userDataManager.PersistAsync(userId.Value).ConfigureAwait(false);
 
             return Ok();
@@ -306,7 +305,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(401)]
         public async Task<IActionResult> GetPreferredSubtitleLanguages()
         {
-            var userId = GetUserGuid();
+            var userId = User.GetUserId();
             if (userId == null)
             {
                 return Unauthorized();
@@ -329,7 +328,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(400)]
         public async Task<IActionResult> SetPreferredSubtitleLanguages([FromBody] List<string> languages)
         {
-            var userId = GetUserGuid();
+            var userId = User.GetUserId();
             if (userId == null)
             {
                 return Unauthorized();
@@ -337,25 +336,50 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
 
             await _userDataManager.EnsureLoadedAsync(userId.Value).ConfigureAwait(false);
 
-            if (languages == null)
+            if (!TryNormalizeLanguages(languages, out var normalized, out var error))
             {
-                return BadRequest(new { error = "Languages list cannot be null" });
+                return BadRequest(new { error });
             }
 
-            _userDataManager.SetPreferredSubtitleLanguages(userId.Value, languages);
+            _userDataManager.SetPreferredSubtitleLanguages(userId.Value, normalized);
             await _userDataManager.PersistAsync(userId.Value).ConfigureAwait(false);
 
             return Ok();
         }
 
-        private Guid? GetUserGuid()
+        private const int MaxLanguagePreferences = 50;
+        private const int MaxLanguageCodeLength = 16;
+
+        private static bool TryNormalizeLanguages(List<string>? languages, out List<string> normalized, out string error)
         {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim != null && Guid.TryParse(userIdClaim.Value, out var userId))
+            normalized = new List<string>();
+            if (languages == null)
             {
-                return userId;
+                error = "Languages list cannot be null";
+                return false;
             }
-            return null;
+
+            if (languages.Count > MaxLanguagePreferences)
+            {
+                error = $"At most {MaxLanguagePreferences} language codes are allowed";
+                return false;
+            }
+
+            foreach (var language in languages)
+            {
+                if (string.IsNullOrWhiteSpace(language) || language.Length > MaxLanguageCodeLength)
+                {
+                    error = $"Language codes must be non-empty and at most {MaxLanguageCodeLength} characters";
+                    return false;
+                }
+            }
+
+            normalized = languages
+                .Select(l => l.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            error = string.Empty;
+            return true;
         }
     }
 }

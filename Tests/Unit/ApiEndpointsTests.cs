@@ -26,6 +26,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         private readonly Mock<IMediaCccApiClient> _apiClientMock;
         private readonly Mock<IUserDataManager> _userDataManagerMock;
         private readonly Mock<ISyncLogger> _syncLoggerMock;
+        private readonly Mock<ISyncTrigger> _syncTriggerMock;
         private readonly Mock<ILogger<MediaCccController>> _mediaCccLoggerMock;
         private readonly Mock<ILogger<SyncController>> _syncLoggerControllerMock;
 
@@ -34,6 +35,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             _apiClientMock = new Mock<IMediaCccApiClient>(MockBehavior.Strict);
             _userDataManagerMock = new Mock<IUserDataManager>(MockBehavior.Loose);
             _syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Strict);
+            _syncTriggerMock = new Mock<ISyncTrigger>(MockBehavior.Loose);
             _mediaCccLoggerMock = new Mock<ILogger<MediaCccController>>(MockBehavior.Loose);
             _syncLoggerControllerMock = new Mock<ILogger<SyncController>>(MockBehavior.Loose);
         }
@@ -250,11 +252,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var eventGuid = "event-123";
 
             _userDataManagerMock
-                .Setup(x => x.IsOnWatchlist(userId, eventGuid))
-                .Returns(false);
-
-            _userDataManagerMock
-                .Setup(x => x.AddToWatchlist(userId, eventGuid));
+                .Setup(x => x.AddToWatchlistIfMissing(userId, eventGuid))
+                .Returns(true);
 
             _userDataManagerMock
                 .Setup(x => x.PersistAsync(userId))
@@ -267,7 +266,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert
             Assert.IsType<OkResult>(result);
-            _userDataManagerMock.Verify(x => x.AddToWatchlist(userId, eventGuid), Times.Once);
+            _userDataManagerMock.Verify(x => x.AddToWatchlistIfMissing(userId, eventGuid), Times.Once);
             _userDataManagerMock.Verify(x => x.PersistAsync(userId), Times.Once);
         }
 
@@ -306,17 +305,21 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var eventGuid = "event-123";
 
             _userDataManagerMock
-                .Setup(x => x.IsOnWatchlist(userId, eventGuid))
-                .Returns(true);
+                .Setup(x => x.AddToWatchlistIfMissing(userId, eventGuid))
+                .Returns(false);
+
+            _userDataManagerMock
+                .Setup(x => x.PersistAsync(userId))
+                .Returns(Task.CompletedTask);
 
             var controller = CreateMediaCccControllerWithUser(userId);
 
             // Act
             var result = await controller.AddToWatchlist(eventGuid);
 
-            // Assert - Should return Ok but not add duplicate
+            // Assert - Should return Ok but not write a duplicate
             Assert.IsType<OkResult>(result);
-            _userDataManagerMock.Verify(x => x.AddToWatchlist(userId, eventGuid), Times.Never);
+            _userDataManagerMock.Verify(x => x.PersistAsync(userId), Times.Never);
         }
 
         #endregion
@@ -472,6 +475,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert
             Assert.IsType<AcceptedResult>(result);
+        }
+
+        [Fact]
+        public async Task TriggerSync_ActuallyInvokes_the_sync_trigger()
+        {
+            var controller = CreateSyncControllerAsAdmin();
+
+            await controller.TriggerSync();
+
+            _syncTriggerMock.Verify(
+                t => t.TriggerSyncAsync(It.IsAny<CancellationToken>()),
+                Times.Once);
         }
 
         [Fact]
@@ -791,7 +806,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.NameIdentifier, userId.ToString())
+                new Claim("Jellyfin-UserId", userId.ToString("N"))
             };
             var identity = new ClaimsIdentity(claims, "Test");
             var principal = new ClaimsPrincipal(identity);
@@ -813,7 +828,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var controller = new SyncController(
                 _syncLoggerControllerMock.Object,
                 _syncLoggerMock.Object,
-                _apiClientMock.Object);
+                _apiClientMock.Object,
+                _syncTriggerMock.Object);
 
             controller.ControllerContext = new ControllerContext
             {

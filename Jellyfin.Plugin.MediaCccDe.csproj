@@ -35,8 +35,6 @@
   <ItemGroup>
     <EmbeddedResource Include="Configuration\**\*.html" />
     <EmbeddedResource Include="Pages\**\*.html" />
-    <EmbeddedResource Include="Pages\**\*.js" />
-    <EmbeddedResource Include="Controllers\**\*.js" />
   </ItemGroup>
 
 </Project>

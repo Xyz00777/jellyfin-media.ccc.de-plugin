@@ -20,5 +20,22 @@ namespace Jellyfin.Plugin.MediaCccDe.Models
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
         public int Priority { get; set; }
+
+        public DownloadQueueItem Copy() => new()
+        {
+            Id = Id,
+            UserId = UserId,
+            EventGuid = EventGuid,
+            EventTitle = EventTitle,
+            ConferenceAcronym = ConferenceAcronym,
+            RecordingUrl = RecordingUrl,
+            DestinationPath = DestinationPath,
+            Status = Status,
+            Progress = Progress,
+            ErrorMessage = ErrorMessage,
+            CreatedAt = CreatedAt,
+            UpdatedAt = UpdatedAt,
+            Priority = Priority
+        };
     }
 }

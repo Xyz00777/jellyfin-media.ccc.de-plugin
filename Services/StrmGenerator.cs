@@ -69,7 +69,29 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
             if (!File.Exists(filePath) || !string.Equals(await File.ReadAllTextAsync(filePath, cancellationToken).ConfigureAwait(false), recording.Url, StringComparison.Ordinal))
             {
-                await File.WriteAllTextAsync(filePath, recording.Url, cancellationToken).ConfigureAwait(false);
+                // Write to a sibling temp file and move into place, so an interrupted
+                // write can never leave a truncated .strm that later runs skip.
+                var tempPath = filePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    await File.WriteAllTextAsync(tempPath, recording.Url, cancellationToken).ConfigureAwait(false);
+                    File.Move(tempPath, filePath, overwrite: true);
+                }
+                catch
+                {
+                    try
+                    {
+                        if (File.Exists(tempPath))
+                        {
+                            File.Delete(tempPath);
+                        }
+                    }
+                    catch (IOException)
+                    {
+                    }
+
+                    throw;
+                }
             }
 
             return new StrmResult

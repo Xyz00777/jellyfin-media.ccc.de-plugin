@@ -508,7 +508,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public void EnsureDirectoryExists_handles_concurrent_calls()
+        public async Task EnsureDirectoryExists_handles_concurrent_calls()
         {
             // Arrange
             var dirPath = Path.Combine(_testDownloadPath, "concurrent-dir");
@@ -519,7 +519,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             {
                 tasks[i] = Task.Run(() => _fileService.EnsureDirectoryExists(dirPath));
             }
-            Task.WaitAll(tasks);
+            await Task.WhenAll(tasks);
 
             // Assert
             Assert.True(Directory.Exists(dirPath));
