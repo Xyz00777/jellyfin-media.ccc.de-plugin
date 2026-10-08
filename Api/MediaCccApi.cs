@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Models;
@@ -174,7 +174,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Api
             var payload = await GetAsyncInternal<JsonElement>(httpClient, endpoint, cancellationToken).ConfigureAwait(false);
             var shouldHydrate = payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("events", out _);
             var result = DeserializeEvents(payload);
-            
+
             if (result == null || result.Length == 0)
             {
                 return Array.Empty<EventDto>();

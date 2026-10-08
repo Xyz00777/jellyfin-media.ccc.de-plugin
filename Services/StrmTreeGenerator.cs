@@ -153,7 +153,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 {
                     var seasonFolder = $"Season {dayNumber.Value:D2}";
                     seasonPath = Path.Combine(seriesPath, seasonFolder);
-                    
+
                     if (!Directory.Exists(seasonPath))
                     {
                         Directory.CreateDirectory(seasonPath);

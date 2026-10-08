@@ -166,7 +166,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task ExecuteAsync_creates_strm_files_for_new_conferences()
         {
             _configuration.SyncIntervalHours = 6;
-            
+
             var conferences = new List<ConferenceDto>
             {
                 new ConferenceDto { Title = "37C3", Acronym = "37c3", Slug = "37c3" },
@@ -178,7 +178,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences)
                 .Callback(() => syncCompleted.TrySetResult(true));
-            
+
             _strmGeneratorMock
                 .Setup(x => x.StrmFilesExistForConference(It.IsAny<ConferenceDto>()))
                 .Returns(false);
@@ -212,7 +212,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task ExecuteAsync_rechecks_existing_conferences_for_new_strm_files()
         {
             _configuration.SyncIntervalHours = 6;
-            
+
             var conferences = new List<ConferenceDto>
             {
                 new ConferenceDto { Title = "37C3", Acronym = "37c3", Slug = "37c3" }
@@ -249,7 +249,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task ExecuteAsync_logs_sync_start_and_completion()
         {
             _configuration.SyncIntervalHours = 6;
-            
+
             var conferences = new List<ConferenceDto>
             {
                 new ConferenceDto { Title = "37C3", Acronym = "37c3" }
@@ -308,7 +308,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task ExecuteAsync_handles_api_failure_gracefully()
         {
             _configuration.SyncIntervalHours = 6;
-            
+
             var errorLogged = new TaskCompletionSource<bool>();
             _apiClientMock
                 .Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
@@ -384,7 +384,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var expectedInterval = 12;
             _configuration.SyncIntervalHours = expectedInterval;
             var config = _configuration;
-            
+
             var syncCompleted = new TaskCompletionSource<bool>();
             var conferences = new List<ConferenceDto>();
             _apiClientMock
@@ -415,7 +415,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task ExecuteAsync_updates_sync_log_on_completion()
         {
             _configuration.SyncIntervalHours = 6;
-            
+
             var conferences = new List<ConferenceDto>
             {
                 new ConferenceDto { Title = "37C3", Acronym = "37c3" }

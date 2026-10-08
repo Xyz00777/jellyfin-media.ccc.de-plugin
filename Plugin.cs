@@ -9,9 +9,9 @@ namespace Jellyfin.Plugin.MediaCccDe
 {
     public class Plugin : BasePlugin<PluginConfiguration>, IHasWebPages
     {
-        public Plugin(IApplicationPaths appPaths, IXmlSerializer xmlSerializer) 
+        public Plugin(IApplicationPaths appPaths, IXmlSerializer xmlSerializer)
             : base(appPaths, xmlSerializer) { }
-        
+
         internal static readonly Guid PluginGuid = Guid.Parse("e225c91a-ef11-41ca-b913-6491f15c2992");
 
         internal static readonly Version PluginVersion = typeof(Plugin).Assembly.GetName().Version
@@ -20,15 +20,15 @@ namespace Jellyfin.Plugin.MediaCccDe
         public override string Name => "MediaCCCDe";
         public override Guid Id => PluginGuid;
         public override string Description => "Integrates media.ccc.de conference recordings into Jellyfin";
-        
+
         public IEnumerable<PluginPageInfo> GetPages()
         {
             return new[]
             {
-                new PluginPageInfo 
-                { 
-                    Name = Name, 
-                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html" 
+                new PluginPageInfo
+                {
+                    Name = Name,
+                    EmbeddedResourcePath = GetType().Namespace + ".Configuration.configPage.html"
                 },
                 new PluginPageInfo
                 {
@@ -59,10 +59,10 @@ namespace Jellyfin.Plugin.MediaCccDe
                     Name = "MediaCCC Settings",
                     EmbeddedResourcePath = GetType().Namespace + ".Pages.settings.html"
                 },
-                new PluginPageInfo 
-                { 
-                    Name = Name + " Sync Log", 
-                    EmbeddedResourcePath = GetType().Namespace + ".Pages.sync-log.html" 
+                new PluginPageInfo
+                {
+                    Name = Name + " Sync Log",
+                    EmbeddedResourcePath = GetType().Namespace + ".Pages.sync-log.html"
                 }
             };
         }

@@ -87,11 +87,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
         {
             var syncCompletedTcs = new TaskCompletionSource<bool>();
             var syncLoggerMock = new Mock<ISyncLogger>(MockBehavior.Loose);
-            
+
             syncLoggerMock
                 .Setup(x => x.LogSyncCompletion(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<DateTime>()))
                 .Callback<int, int, DateTime>((processed, created, timestamp) => syncCompletedTcs.TrySetResult(true));
-            
+
             syncLoggerMock
                 .Setup(x => x.LogSyncFailure(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
                 .Callback<string, string, int, int>((conf, error, processed, created) => syncCompletedTcs.TrySetResult(true));
@@ -102,7 +102,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
             var realLogger = new SyncLogger(_applicationPathsMock.Object, new Mock<ILogger<SyncLogger>>().Object);
             await realLogger.LoadAsync();
             var history = realLogger.GetSyncHistory();
-            
+
             syncLoggerMock.Setup(x => x.GetSyncHistory(It.IsAny<string>())).Returns(() => realLogger.GetSyncHistory());
 
             return (syncLoggerMock, syncCompletedTcs);
@@ -146,7 +146,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
             await _syncService.StopAsync(CancellationToken.None);
 
             Assert.True(Directory.Exists(_testArchivePath), "Archive directory should be created");
-            
+
             var conferenceDirs = Directory.GetDirectories(_testArchivePath);
             Assert.True(conferenceDirs.Length > 0, "Should create conference directories in archive");
             Assert.Contains(conferenceDirs, d => Path.GetFileName(d) == "37c3");
@@ -349,7 +349,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Integration
             var finalFileCount = Directory.GetFiles(_testArchivePath, "*.strm", SearchOption.AllDirectories).Length;
 
             Assert.Equal(initialFileCount, finalFileCount);
-            
+
             _apiClientMock.Verify(
                 x => x.GetEventsAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
                 Times.AtLeast(1));

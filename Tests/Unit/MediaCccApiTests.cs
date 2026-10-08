@@ -1,15 +1,15 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Collections.Generic;
+using Jellyfin.Plugin.MediaCccDe.Api;
+using Jellyfin.Plugin.MediaCccDe.Models;
 using Moq;
 using Moq.Protected;
 using Xunit;
-using Jellyfin.Plugin.MediaCccDe.Models;
-using Jellyfin.Plugin.MediaCccDe.Api;
 
 namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 {
@@ -58,7 +58,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var testData = new TestResponse { Name = "Test", Id = 42 };
             var json = JsonSerializer.Serialize(testData);
-            
+
             var handlerMock = CreateHttpMessageHandlerMock(json, HttpStatusCode.OK);
             var httpClient = new HttpClient(handlerMock.Object);
             var apiClient = CreateApiClient(httpClient);
@@ -83,7 +83,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Act & Assert
             var exception = await Assert.ThrowsAsync<HttpRequestException>(
                 () => apiClient.GetAsync<TestResponse>("nonexistent"));
-            
+
             Assert.Contains("404", exception.Message);
         }
 
@@ -91,8 +91,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetAsync_handles_http_errors()
         {
             // Arrange
-            var errorCodes = new[] { HttpStatusCode.InternalServerError, 
-                                      HttpStatusCode.BadGateway, 
+            var errorCodes = new[] { HttpStatusCode.InternalServerError,
+                                      HttpStatusCode.BadGateway,
                                       HttpStatusCode.ServiceUnavailable,
                                       HttpStatusCode.BadRequest };
 
@@ -105,7 +105,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 // Act & Assert
                 var exception = await Assert.ThrowsAsync<HttpRequestException>(
                     () => apiClient.GetAsync<TestResponse>("error/endpoint"));
-                
+
                 Assert.Contains(((int)errorCode).ToString(), exception.Message);
             }
         }
@@ -191,7 +191,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var testData = new TestResponse { Name = "OK", Id = 1 };
             var json = JsonSerializer.Serialize(testData);
             Uri? capturedUri = null;
-            
+
             var handlerMock = new Mock<HttpMessageHandler>();
             handlerMock.Protected()
                 .Setup<Task<HttpResponseMessage>>(
@@ -405,7 +405,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 {""title"":""37C3"",""acronym"":""37c3"",""slug"":""37c3"",""aspect_ratio"":""16:9"",""updated_at"":""2024-01-01T00:00:00Z""},
                 {""title"":""36C3"",""acronym"":""36c3"",""slug"":""36c3"",""aspect_ratio"":""16:9"",""updated_at"":""2023-01-01T00:00:00Z""}
             ]";
-            
+
             var handlerMock = CreateHttpMessageHandlerMock(json, HttpStatusCode.OK);
             var httpClient = new HttpClient(handlerMock.Object);
             var apiClient = CreateApiClient(httpClient);
@@ -453,7 +453,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     ""schedule_url"": ""https://defcon.org/schedule""
                 }
             ]";
-            
+
             var handlerMock = CreateHttpMessageHandlerMock(json, HttpStatusCode.OK);
             var httpClient = new HttpClient(handlerMock.Object);
             var apiClient = CreateApiClient(httpClient);
@@ -527,8 +527,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             var evt = Assert.Single(result);
             Assert.Equal("event-1", evt.Guid);
-            Assert.Single(evt.Recordings!);
-            Assert.Equal("https://cdn.example.test/opening.mp4", evt.Recordings[0].EffectiveUrl);
+            var recordings = evt.Recordings;
+            Assert.NotNull(recordings);
+            Assert.Single(recordings);
+            Assert.Equal("https://cdn.example.test/opening.mp4", recordings[0].EffectiveUrl);
         }
 
         [Fact]
@@ -564,10 +566,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetConferences_handles_http_error()
         {
             // Arrange
-            var errorCodes = new[] { 
-                HttpStatusCode.InternalServerError, 
+            var errorCodes = new[] {
+                HttpStatusCode.InternalServerError,
                 HttpStatusCode.BadGateway,
-                HttpStatusCode.ServiceUnavailable 
+                HttpStatusCode.ServiceUnavailable
             };
 
             foreach (var errorCode in errorCodes)
@@ -579,7 +581,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 // Act & Assert
                 var exception = await Assert.ThrowsAsync<HttpRequestException>(
                     () => apiClient.GetConferencesAsync());
-                
+
                 Assert.Contains(((int)errorCode).ToString(), exception.Message);
             }
         }
@@ -595,7 +597,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Act & Assert
             var exception = await Assert.ThrowsAsync<HttpRequestException>(
                 () => apiClient.GetConferencesAsync());
-            
+
             Assert.Contains("404", exception.Message);
         }
 
@@ -636,7 +638,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     ""recordings"": []
                 }
             ]";
-            
+
             var handlerMock = CreateHttpMessageHandlerMock(eventsJson, HttpStatusCode.OK);
             var httpClient = new HttpClient(handlerMock.Object);
             var apiClient = CreateApiClient(httpClient);
@@ -691,7 +693,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     }
                 ]
             }]";
-            
+
             var handlerMock = CreateHttpMessageHandlerMock(eventWithRecordings, HttpStatusCode.OK);
             var httpClient = new HttpClient(handlerMock.Object);
             var apiClient = CreateApiClient(httpClient);
@@ -701,10 +703,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert
             Assert.Single(result);
-            Assert.NotNull(result[0].Recordings);
-            Assert.Single(result[0].Recordings);
-            Assert.Equal("en", result[0].Recordings[0].Language);
-            Assert.Equal("mp4", result[0].Recordings[0].Format);
+            var recordings = result[0].Recordings;
+            Assert.NotNull(recordings);
+            Assert.Single(recordings);
+            Assert.Equal("en", recordings[0].Language);
+            Assert.Equal("mp4", recordings[0].Format);
         }
 
         [Fact]
@@ -746,7 +749,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Act & Assert
             var exception = await Assert.ThrowsAsync<HttpRequestException>(
                 () => apiClient.GetEventsAsync(404));
-            
+
             Assert.Contains("404", exception.Message);
         }
 
@@ -803,7 +806,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     }
                 ]
             }";
-            
+
             var handlerMock = CreateHttpMessageHandlerMock(eventJson, HttpStatusCode.OK);
             var httpClient = new HttpClient(handlerMock.Object);
             var apiClient = CreateApiClient(httpClient);
@@ -823,7 +826,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Assert.Equal(123, result.ConferenceId);
             Assert.NotNull(result.Recordings);
             Assert.Single(result.Recordings);
-            
+
             var recording = result.Recordings[0];
             Assert.Equal("en", recording.Language);
             Assert.Equal("mp4", recording.Format);
@@ -845,7 +848,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Act & Assert
             var exception = await Assert.ThrowsAsync<HttpRequestException>(
                 () => apiClient.GetEventAsync("nonexistent-guid"));
-            
+
             Assert.Contains("404", exception.Message);
         }
 
@@ -859,10 +862,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Act & Assert
             await Assert.ThrowsAsync<ArgumentException>(
                 () => apiClient.GetEventAsync(""));
-            
+
             await Assert.ThrowsAsync<ArgumentException>(
                 () => apiClient.GetEventAsync("   "));
-            
+
             await Assert.ThrowsAsync<ArgumentException>(
                 () => apiClient.GetEventAsync(null!));
         }
@@ -873,7 +876,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var eventJson = @"{""guid"": ""test-guid"", ""title"": ""Test Event""}";
             Uri? capturedUri = null;
-            
+
             var handlerMock = new Mock<HttpMessageHandler>();
             handlerMock.Protected()
                 .Setup<Task<HttpResponseMessage>>(
@@ -941,7 +944,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     }
                 ]
             }";
-            
+
             var handlerMock = CreateHttpMessageHandlerMock(eventJson, HttpStatusCode.OK);
             var httpClient = new HttpClient(handlerMock.Object);
             var apiClient = CreateApiClient(httpClient);
@@ -953,17 +956,17 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Assert.NotNull(result);
             Assert.NotNull(result.Recordings);
             Assert.Equal(3, result.Recordings.Count);
-            
+
             // First recording (HD English)
             Assert.Equal("en", result.Recordings[0].Language);
             Assert.Equal("mp4", result.Recordings[0].Format);
             Assert.True(result.Recordings[0].HighQuality);
-            
+
             // Second recording (SD English)
             Assert.Equal("en", result.Recordings[1].Language);
             Assert.Equal("webm", result.Recordings[1].Format);
             Assert.False(result.Recordings[1].HighQuality);
-            
+
             // Third recording (HD German)
             Assert.Equal("de", result.Recordings[2].Language);
             Assert.Equal("mp4", result.Recordings[2].Format);
@@ -981,7 +984,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Act & Assert - Should throw HttpRequestException for 404
             var exception = await Assert.ThrowsAsync<HttpRequestException>(
                 () => apiClient.GetEventAsync("nonexistent-guid"));
-            
+
             Assert.NotNull(exception);
         }
 
@@ -1000,7 +1003,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 ""conference_id"": 789,
                 ""recordings"": []
             }";
-            
+
             var handlerMock = CreateHttpMessageHandlerMock(eventJson, HttpStatusCode.OK);
             var httpClient = new HttpClient(handlerMock.Object);
             var apiClient = CreateApiClient(httpClient);
@@ -1028,7 +1031,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 ""length"": 1800,
                 ""conference_id"": 999
             }";
-            
+
             var handlerMock = CreateHttpMessageHandlerMock(eventJson, HttpStatusCode.OK);
             var httpClient = new HttpClient(handlerMock.Object);
             var apiClient = CreateApiClient(httpClient);
@@ -1079,7 +1082,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     ]
                 }
             ]";
-            
+
             var handlerMock = CreateHttpMessageHandlerMock(json, HttpStatusCode.OK);
             var httpClient = new HttpClient(handlerMock.Object);
             var apiClient = CreateApiClient(httpClient);
@@ -1089,14 +1092,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert
             Assert.Single(result);
-            Assert.NotNull(result[0].Recordings);
-            Assert.Equal(2, result[0].Recordings!.Count);
-            Assert.Equal("en", result[0].Recordings[0].Language);
-            Assert.Equal("webm", result[0].Recordings[0].Format);
-            Assert.True(result[0].Recordings[0].HighQuality);
-            Assert.Equal("de", result[0].Recordings[1].Language);
-            Assert.Equal("mp4", result[0].Recordings[1].Format);
-            Assert.False(result[0].Recordings[1].HighQuality);
+            var recordings = result[0].Recordings;
+            Assert.NotNull(recordings);
+            Assert.Equal(2, recordings.Count);
+            Assert.Equal("en", recordings[0].Language);
+            Assert.Equal("webm", recordings[0].Format);
+            Assert.True(recordings[0].HighQuality);
+            Assert.Equal("de", recordings[1].Language);
+            Assert.Equal("mp4", recordings[1].Format);
+            Assert.False(recordings[1].HighQuality);
         }
 
         [Fact]
@@ -1121,7 +1125,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     ""recordings"": []
                 }
             ]";
-            
+
             var handlerMock = CreateHttpMessageHandlerMock(json, HttpStatusCode.OK);
             var httpClient = new HttpClient(handlerMock.Object);
             var apiClient = CreateApiClient(httpClient);
@@ -1149,7 +1153,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 {""guid"": ""r4"", ""title"": ""Talk 4"", ""date"": ""2024-01-12"", ""slug"": ""t4"", ""conference_id"": 1, ""recordings"": []},
                 {""guid"": ""r5"", ""title"": ""Talk 5"", ""date"": ""2024-01-11"", ""slug"": ""t5"", ""conference_id"": 1, ""recordings"": []}
             ]";
-            
+
             Uri? capturedUri = null;
             var handlerMock = new Mock<HttpMessageHandler>();
             handlerMock.Protected()
@@ -1251,7 +1255,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     ""recordings"": []
                 }
             ]";
-            
+
             var handlerMock = CreateHttpMessageHandlerMock(json, HttpStatusCode.OK);
             var httpClient = new HttpClient(handlerMock.Object);
             var apiClient = CreateApiClient(httpClient);
@@ -1278,7 +1282,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Act & Assert
             var exception = await Assert.ThrowsAsync<HttpRequestException>(
                 () => apiClient.GetRecentAsync());
-            
+
             Assert.Contains("500", exception.Message);
         }
 

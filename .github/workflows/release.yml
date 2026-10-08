@@ -97,6 +97,20 @@ jobs:
           PY
         shell: bash
 
+      - name: Generate Jellyfin plugin repository manifest
+        env:
+          ASSET_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/media-ccc-de-plugin-${{ env.VERSION }}.zip
+          ZIP_PATH: dist/media-ccc-de-plugin-${{ env.VERSION }}.zip
+          OUTPUT_PATH: dist/manifest.json
+        run: |
+          set -euo pipefail
+          # SHA-256 hex is a best-effort checksum format assumption; the server model allows
+          # checksum to be nullable, so an unsupported value is plausibly tolerated as absent.
+          bash scripts/generate-manifest.sh "$VERSION" "$ASSET_URL" "$ZIP_PATH"
+          # A tag-pinned raw manifest is reproducible and stable, but lists only this release.
+          echo "manifest_url: https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/manifest.json" >> "$GITHUB_STEP_SUMMARY"
+        shell: bash
+
       - name: Publish GitHub Release with generated notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -106,7 +120,7 @@ jobs:
             echo "GitHub Release for '$GITHUB_REF_NAME' already exists; skipping publish."
             exit 0
           fi
-          gh release create "$GITHUB_REF_NAME" "dist/media-ccc-de-plugin-${VERSION}.zip" \
+          gh release create "$GITHUB_REF_NAME" "dist/media-ccc-de-plugin-${VERSION}.zip" "dist/manifest.json" \
             --title "Media.CCC.de v${VERSION} (Jellyfin ${CONTROLLER_VERSION}+)" \
             --generate-notes
         shell: bash

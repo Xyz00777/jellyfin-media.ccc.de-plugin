@@ -52,16 +52,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         {
             cancellationToken.ThrowIfCancellationRequested();
             _logger.LogInformation("Starting conference sync background service");
-            
+
             _backgroundTask = ExecuteAsync(_cts.Token);
-            
+
             return Task.CompletedTask;
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
             _cts.Cancel();
-            
+
             if (_backgroundTask != null)
             {
                 await Task.WhenAny(_backgroundTask, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);

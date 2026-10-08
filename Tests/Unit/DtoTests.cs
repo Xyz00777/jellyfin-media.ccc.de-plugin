@@ -1,8 +1,8 @@
-using Xunit;
-using System.Text.Json;
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using Jellyfin.Plugin.MediaCccDe.Models;
+using Xunit;
 
 namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 {
@@ -356,6 +356,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var recording = new Recording { Id = 1, HighQuality = null, Url = "https://example.com/v.mp4" };
             var json = JsonSerializer.Serialize(recording);
             var deserialized = JsonSerializer.Deserialize<Recording>(json);
+            Assert.NotNull(deserialized);
             Assert.Null(deserialized.HighQuality);
         }
 

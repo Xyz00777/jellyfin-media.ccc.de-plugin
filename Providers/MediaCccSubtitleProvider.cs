@@ -4,16 +4,16 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using MediaBrowser.Controller.Library;
-using Microsoft.Extensions.Logging;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Services;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
 using MediaBrowser.Model.Providers;
+using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.MediaCccDe.Providers
 {

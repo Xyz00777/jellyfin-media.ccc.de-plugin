@@ -189,13 +189,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             var filePath = Path.Combine(_testDataPath, "sync-logs.json");
             Assert.True(File.Exists(filePath));
-            
+
             var json = await File.ReadAllTextAsync(filePath);
             var entries = JsonSerializer.Deserialize<List<SyncLogEntry>>(json, new JsonSerializerOptions
             {
                 Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
             });
-            
+
             Assert.NotNull(entries);
             Assert.Single(entries);
             Assert.Equal("37c3", entries![0].ConferenceAcronym);
@@ -341,7 +341,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert - Should have empty history and log warning
             var history = syncLogger.GetSyncHistory();
             Assert.Empty(history);
-            
+
             _loggerMock.Verify(
                 x => x.Log(
                     LogLevel.Warning,

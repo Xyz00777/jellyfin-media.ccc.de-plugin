@@ -19,6 +19,8 @@
           packages = with pkgs; [
             dotnet-sdk
             dotnetPackages.Nuget
+            shellcheck
+            actionlint
             zip
           ];
 

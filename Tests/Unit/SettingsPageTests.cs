@@ -219,7 +219,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Assert.Contains("&lt;img", html);
         }
 
-[Fact]
+        [Fact]
         public void Quality_is_rendered_so_saving_cannot_wipe_it()
         {
             var html = SettingsPageHtml.Render(new PluginConfiguration { PreferredQuality = "sd" }, null, null, "en", Translations.For("en"));

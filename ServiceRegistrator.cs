@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http.Headers;
 using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Controllers;
+using Jellyfin.Plugin.MediaCccDe.Providers;
 using Jellyfin.Plugin.MediaCccDe.Services;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
@@ -12,10 +13,9 @@ using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
-using Jellyfin.Plugin.MediaCccDe.Providers;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace Jellyfin.Plugin.MediaCccDe;
 
@@ -36,7 +36,7 @@ public class ServiceRegistrator : IPluginServiceRegistrator
         {
             AllowAutoRedirect = false
         });
-        
+
         serviceCollection.AddSingleton<IMediaCccApiClient, MediaCccApi>();
         serviceCollection.AddSingleton<IConferenceScheduleCache, ConferenceScheduleCache>();
         serviceCollection.AddSingleton<IRecordingSelector, RecordingSelector>();
@@ -81,7 +81,7 @@ public class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<IWatchlistDownloadService, WatchlistDownloadService>();
         serviceCollection.AddSingleton<SyncService>();
         serviceCollection.AddSingleton<ISyncTrigger>(sp => sp.GetRequiredService<SyncService>());
-        
+
         serviceCollection.AddSingleton<Func<PluginConfiguration>>(sp =>
         {
             var pluginManager = sp.GetRequiredService<IPluginManager>();

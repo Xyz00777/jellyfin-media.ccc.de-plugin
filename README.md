@@ -25,7 +25,13 @@ The plugin project references `Jellyfin.Controller` and `Jellyfin.Model` 12.2.0,
 
 ## Installation
 
-No GitHub Releases have been published yet. Once a release is published, its asset is a ZIP named `media-ccc-de-plugin-<version>.zip`. To install it, unpack it into Jellyfin's versioned plugin directory and restart Jellyfin, as described below. Jellyfin's **Dashboard > Plugins > Repositories > Add** page expects the URL of a plugin-repository `manifest.json`, not a ZIP, so it is not used for GitHub Release assets. Until a release is available, or to build for Jellyfin 10.11 or a different Jellyfin API version, build from source:
+No GitHub Releases have been published yet. Once a release is published, each release carries two assets: a plugin ZIP named `media-ccc-de-plugin-<version>.zip`, and a `manifest.json` for Jellyfin's plugin-repository mechanism.
+
+There are three ways to install, in order of convenience:
+
+1. **Unpack the ZIP** into Jellyfin's versioned plugin directory (see below) and restart Jellyfin.
+2. **Add the repository** under Dashboard > Plugins > Repositories > Add, using the download URL of the release's `manifest.json` asset, then install the plugin from the catalog. This page expects the URL of a plugin-repository `manifest.json`, not a ZIP, which is why the ZIP cannot be uploaded there.
+3. **Build from source**, which you must do for Jellyfin 10.11 or a different Jellyfin API version:
 
 Clone the repository and build the package:
 
@@ -110,9 +116,29 @@ On the first visit, provide your own Jellyfin API key from Dashboard > Advanced 
 
 These preferences apply to watchlist downloads. Streaming uses one shared `.strm` per talk and cannot vary by user; the server-wide `PreferredAudioLanguages` setting determines what that `.strm` points to. The preferences are also available through `GET` and `POST` at `/media_ccc/languages/audio` and `/media_ccc/languages/subtitles`. The dashboard's `Language Preferences` menu link opens this standalone page rather than providing a working dashboard form.
 
+## Languages
+
+The plugin's own web interface ships in **English and German**. The language is chosen per request from the `Accept-Language` header your browser sends, falling back to English. Every plugin page has a language switcher in the top-right corner, and you can force a language with a `?lang=en` or `?lang=de` query parameter, for example:
+
+```text
+http://<your-jellyfin>/media_ccc/browse?lang=de
+```
+
+This is separate from the audio and subtitle language preferences below, which choose the *media* language rather than the interface language.
+
 ## Usage
 
-The server menu includes links to **Browse**, **CCC Watchlist**, and **Language Preferences**. The registered `MediaCCC Settings` and `MediaCCCDe Sync Log` pages are not in that menu. Sync API endpoints require an elevated user.
+The server menu includes links to **Browse**, **CCC Watchlist**, and **Language Preferences**. Each of those entries opens a short pointer page in the dashboard that immediately forwards to the plugin-served page, because Jellyfin 12's dashboard does not execute plugin page scripts. The `MediaCCC Settings` and `MediaCCCDe Sync Log` pages are registered but are not in that menu; reach them by URL:
+
+| Page | URL |
+|------|-----|
+| Browse conferences | `http://<your-jellyfin>/media_ccc/browse` |
+| Watchlist | `http://<your-jellyfin>/media_ccc/watchlist/page` |
+| Sync log | `http://<your-jellyfin>/media_ccc/sync/log` |
+| Settings | `http://<your-jellyfin>/media_ccc/settings` |
+| Language preferences | `http://<your-jellyfin>/media_ccc/settings/languages` |
+
+Browse and the watchlist identify you once with your own Jellyfin API key and then remember you with a signed cookie, the same handshake the language preferences page uses. Sync log history is readable by anyone who can reach the server URL; the sync *actions* still require an elevated user.
 
 `CCC Archive` is a TV library backed by `{PluginConfigurationsPath}/archive`. Per-user watchlist libraries are created for sanitized usernames. During synchronization, stale archive `.strm` files that no longer correspond to anything in the current API response are removed. Downloaded watchlist videos are not automatically cleaned up.
 
@@ -180,7 +206,27 @@ The `/media_ccc` routes require an authenticated user. The `/media_ccc/sync` rou
 | GET | `/media_ccc/settings/download` | Settings access token | Download settings. |
 | GET | `/media_ccc/settings/languages` | User API-key handshake | Get the language preferences page. |
 | POST | `/media_ccc/settings/languages` | User API-key handshake | Save per-user language preferences. |
-| POST | `/media_ccc/settings/languages/identify` | User API-key handshake | Identify the user using their Jellyfin API key. |
+| GET | `/media_ccc/settings/languages/identify` | User API-key handshake | Identify the user using their Jellyfin API key. |
+
+### Plugin-served HTML pages
+
+These render the web interface. They are the paths the dashboard menu entries forward to, and they accept `?lang=en` or `?lang=de`.
+
+| Method | Endpoint | Access | Description |
+|--------|----------|--------|-------------|
+| GET | `/media_ccc/browse` | Any | Browse conferences. Accepts `q`, `year`, `conference`. |
+| POST | `/media_ccc/browse/events` | Any | Select a conference and list its events. |
+| POST | `/media_ccc/browse/add` | Identified user | Add a talk to the watchlist and queue its download. |
+| POST | `/media_ccc/browse/identify` | Any | Identify the user with a Jellyfin API key. |
+| GET | `/media_ccc/watchlist/page` | Any | Show the watchlist and download queue. |
+| POST | `/media_ccc/watchlist/page/start` | Identified user | Queue downloads for the watchlist. |
+| POST | `/media_ccc/watchlist/page/remove` | Identified user | Remove one item. Posts `eventGuid`. |
+| POST | `/media_ccc/watchlist/page/retry` | Identified user | Retry a failed item. Posts `eventGuid`. |
+| POST | `/media_ccc/watchlist/page/identify` | Any | Identify the user with a Jellyfin API key. |
+| GET | `/media_ccc/sync/log` | Any | Show the synchronization history. |
+| GET | `/media_ccc/sync/history/confirm` | Any | Confirmation step before clearing the history. |
+| POST | `/media_ccc/sync/history/confirm` | Elevated user | Clear the synchronization history. |
+| POST | `/media_ccc/sync/log/trigger` | Elevated user | Trigger a synchronization from the page. |
 
 ## Development
 
@@ -198,16 +244,26 @@ The build script accepts `build`, `test`, `release`, `package`, `clean`, and `he
 ./build.sh release
 ```
 
-`release` runs a Release build, tests, and packaging. Release builds set `TreatWarningsAsErrors=true` with `NoWarn=CS1591;CS1573` for the main plugin project. The Tests project can emit nullable warnings without failing. Plain .NET commands also work:
+`release` runs a Release build, tests, and packaging. Release builds set `TreatWarningsAsErrors=true` with `NoWarn=CS1591;CS1573` for the main plugin project, and the test project treats warnings as errors too. Plain .NET commands also work:
 
 ```bash
 dotnet build --configuration Release
 dotnet test
 ```
 
-`./build.sh package` produces `dist/media-ccc-de-plugin-<version>.zip`, containing exactly `Jellyfin.Plugin.MediaCccDe.dll` and `meta.json`, both copied to `dist/` first.
+`./build.sh package` produces `dist/media-ccc-de-plugin-<version>.zip`, containing exactly `Jellyfin.Plugin.MediaCccDe.dll` and `meta.json`, both copied to `dist/` first. `scripts/generate-manifest.sh` builds the matching `manifest.json` locally.
 
-CI runs on every push and pull request on `ubuntu-latest`, using `dotnet-version: 10.0.x`, restore, Release build with `--no-restore`, and Release test with `--no-build`.
+### Code quality
+
+`.editorconfig` pins the formatting this codebase already uses: four-space indentation, Allman braces, block-scoped namespaces with `using` outside the namespace, LF line endings, and sorted `System` usings. CI and the local pre-commit hooks both verify it:
+
+```bash
+dotnet format Jellyfin.Plugin.MediaCccDe.sln --verify-no-changes --no-restore
+bash scripts/check-version.sh
+sh scripts/check-whitespace.sh
+```
+
+CI additionally runs `shellcheck` over the shell scripts and `actionlint` over the workflow files on every push and pull request. All pre-commit hooks are local shell, so they need no network access and pull in no third-party code; the two linters skip themselves when the tool is not installed. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to enable the hooks.
 
 ### Project structure
 

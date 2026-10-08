@@ -5,22 +5,22 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Plugin.MediaCccDe.Api;
+using Jellyfin.Plugin.MediaCccDe.Models;
+using Jellyfin.Plugin.MediaCccDe.Providers;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Providers;
 using Moq;
 using Moq.Protected;
 using Xunit;
-using Jellyfin.Plugin.MediaCccDe.Api;
-using Jellyfin.Plugin.MediaCccDe.Models;
-using Jellyfin.Plugin.MediaCccDe.Providers;
 
 namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 {
     public class MediaCccSeriesProviderTests
     {
         private const string BaseUrl = "https://api.media.ccc.de/public/";
-        
+
         #region Helper Methods
 
         private static Mock<IMediaCccApiClient> CreateMockApiClient()
@@ -125,7 +125,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 title: "37C3: UnLocked",
                 slug: "37c3"
             );
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .ReturnsAsync(new List<ConferenceDto> { conference });
@@ -147,7 +147,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 title: "37C3: UnLocked",
                 slug: "congress/2023/37c3"  // Different from acronym
             );
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .ReturnsAsync(new List<ConferenceDto> { conference });
@@ -167,13 +167,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var conference = CreateTestConference(
                 url: "https://events.ccc.de/congress/2023/"
             );
-            
+
             var posterData = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 };
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .ReturnsAsync(new List<ConferenceDto> { conference });
-            
+
             var httpClient = CreateHttpClientWithImageResponse(posterData);
             var mockHttpFactory = new Mock<IHttpClientFactory>();
             mockHttpFactory.Setup(x => x.CreateClient(It.IsAny<string>()))
@@ -194,7 +194,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var conference = CreateTestConference(
                 description: "The 37th Chaos Communication Congress - exploring technology, society, and utopia"
             );
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .ReturnsAsync(new List<ConferenceDto> { conference });
@@ -212,7 +212,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetMetadata_sets_Genre_to_Conference()
         {
             var conference = CreateTestConference();
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .ReturnsAsync(new List<ConferenceDto> { conference });
@@ -247,11 +247,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetMetadata_handles_missing_poster_gracefully()
         {
             var conference = CreateTestConference(url: "https://events.ccc.de/congress/2023/");
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .ReturnsAsync(new List<ConferenceDto> { conference });
-            
+
             var httpClient = CreateHttpClientWithNotFoundResponse();
             var mockHttpFactory = new Mock<IHttpClientFactory>();
             mockHttpFactory.Setup(x => x.CreateClient(It.IsAny<string>()))
@@ -261,7 +261,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var seriesId = new SeriesInfo { Name = "37c3" };
 
             var result = await provider.GetMetadata(seriesId, CancellationToken.None);
-            
+
             Assert.True(result.HasMetadata);
         }
 
@@ -269,13 +269,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetMetadata_matches_conference_by_acronym_case_insensitive()
         {
             var conference = CreateTestConference(acronym: "37c3");
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .ReturnsAsync(new List<ConferenceDto> { conference });
 
             var provider = CreateProvider(apiClient: mockApi.Object);
-            
+
             var seriesId = new SeriesInfo { Name = "37C3" };
 
             var result = await provider.GetMetadata(seriesId, CancellationToken.None);
@@ -289,7 +289,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             var conference1 = CreateTestConference(acronym: "37c3", title: "37C3: UnLocked");
             var conference2 = CreateTestConference(acronym: "36c3", title: "36C3: Resource Overflow");
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .ReturnsAsync(new List<ConferenceDto> { conference1, conference2 });
@@ -307,7 +307,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetMetadata_caches_conference_list()
         {
             var conference = CreateTestConference();
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .ReturnsAsync(new List<ConferenceDto> { conference });
@@ -360,7 +360,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetMetadata_handles_null_conference_url()
         {
             var conference = CreateTestConference(url: null);
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .ReturnsAsync(new List<ConferenceDto> { conference });
@@ -377,7 +377,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task GetMetadata_preserves_provider_id()
         {
             var conference = CreateTestConference();
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .ReturnsAsync(new List<ConferenceDto> { conference });
@@ -402,7 +402,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 url: "https://events.ccc.de/congress/2023/",
                 updatedAt: new DateTime(2024, 1, 2)
             );
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .ReturnsAsync(new List<ConferenceDto> { conference });
@@ -428,20 +428,20 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             var cts = new CancellationTokenSource();
             var conference = CreateTestConference();
-            
+
             var mockApi = CreateMockApiClient();
             mockApi.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                    .Returns(async (CancellationToken token) =>
                    {
-                        cts.Cancel();
-                        await Task.Delay(100, token);
-                        return new List<ConferenceDto> { conference };
+                       cts.Cancel();
+                       await Task.Delay(100, token);
+                       return new List<ConferenceDto> { conference };
                    });
 
             var provider = CreateProvider(apiClient: mockApi.Object);
             var seriesId = new SeriesInfo { Name = "37c3" };
 
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => 
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
                 provider.GetMetadata(seriesId, cts.Token));
         }
 
@@ -470,25 +470,26 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             MediaCccSeriesProvider.CacheDuration = TimeSpan.FromMilliseconds(50);
             try
             {
-            var provider = CreateProvider(apiClient: mockApi.Object);
+                var provider = CreateProvider(apiClient: mockApi.Object);
 
-            var seriesId = new SeriesInfo { Name = "37c3" };
+                var seriesId = new SeriesInfo { Name = "37c3" };
 
-            var result1 = await provider.GetMetadata(seriesId, CancellationToken.None);
-            Assert.Equal("37C3: Old Title", result1.Item.Name);
+                var result1 = await provider.GetMetadata(seriesId, CancellationToken.None);
+                Assert.Equal("37C3: Old Title", result1.Item.Name);
 
-            var pollCts = new CancellationTokenSource(5000);
-            MetadataResult<Series> result2 = default;
-            while (!pollCts.IsCancellationRequested)
-            {
-                await Task.Delay(10, pollCts.Token);
-                result2 = await provider.GetMetadata(seriesId, CancellationToken.None);
-                if (result2.Item.Name == "37C3: Updated Title") break;
-            }
+                var pollCts = new CancellationTokenSource(5000);
+                MetadataResult<Series>? result2 = null;
+                while (!pollCts.IsCancellationRequested)
+                {
+                    await Task.Delay(10, pollCts.Token);
+                    result2 = await provider.GetMetadata(seriesId, CancellationToken.None);
+                    if (result2.Item.Name == "37C3: Updated Title") break;
+                }
 
-            Assert.Equal("37C3: Updated Title", result2.Item.Name);
+                Assert.NotNull(result2);
+                Assert.Equal("37C3: Updated Title", result2.Item.Name);
 
-            mockApi.Verify(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()), Times.AtLeast(2));
+                mockApi.Verify(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()), Times.AtLeast(2));
             }
             finally
             {

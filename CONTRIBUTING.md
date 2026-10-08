@@ -8,7 +8,11 @@ Install the .NET 10 SDK. CI uses `10.0.x`; `global.json` pins `10.0.100` with `r
 
 Run `dotnet build --configuration Release` and `dotnet test`. You can also use `./build.sh {build|test|release|package|clean|help}`. The `release` command builds in Release mode, runs tests, and packages `dist/media-ccc-de-plugin-<version>.zip`.
 
-CI runs on every push and pull request on `ubuntu-latest`: restore, Release build with `--no-restore`, then Release test with `--no-build`. Make sure your change passes locally before opening a pull request. Release builds treat warnings as errors for the main plugin project, except `CS1591` and `CS1573` via `NoWarn`. The test project currently emits nullable warnings without failing.
+CI runs on every push and pull request on `ubuntu-latest`: restore, Release build with `--no-restore`, then Release test with `--no-build`. Make sure your change passes locally before opening a pull request. Release builds treat warnings as errors for both projects; the main project excludes `CS1591` and `CS1573` via `NoWarn`.
+
+## Code quality
+
+The root `.editorconfig` records the existing C# layout and whitespace conventions without enabling rewriting style diagnostics. Run `dotnet format Jellyfin.Plugin.MediaCccDe.sln --no-restore` to apply formatting, then `dotnet format Jellyfin.Plugin.MediaCccDe.sln --verify-no-changes --no-restore` to check it. Pre-commit hooks are local, dependency-free, and network-free; CI runs formatting, whitespace, ShellCheck, and actionlint checks. Run `bash scripts/check-version.sh` by hand to verify plugin/Jellyfin versions.
 
 ## Releasing
 

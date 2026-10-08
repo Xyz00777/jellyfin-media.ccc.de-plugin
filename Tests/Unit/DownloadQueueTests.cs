@@ -135,7 +135,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             var user1 = Guid.NewGuid();
             var user2 = Guid.NewGuid();
-            
+
             var item1 = CreateTestItem(userId: user1, eventGuid: "event-1");
             var item2 = CreateTestItem(userId: user1, eventGuid: "event-2");
             var item3 = CreateTestItem(userId: user2, eventGuid: "event-3");
@@ -284,7 +284,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
             File.WriteAllText(filePath, "{ corrupt json }");
 
-            var exception = Record.Exception(() => 
+            var exception = Record.Exception(() =>
                 new DownloadQueue(_applicationPathsMock.Object, _loggerMock.Object));
 
             Assert.Null(exception);

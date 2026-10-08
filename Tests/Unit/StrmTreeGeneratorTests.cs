@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Moq;
-using Xunit;
 using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Services;
 using Microsoft.Extensions.Logging;
+using Moq;
+using Xunit;
 
 namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 {
@@ -98,7 +98,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events);
 
@@ -129,7 +129,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events);
 
@@ -178,7 +178,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events);
 
@@ -190,7 +190,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             // Series folder uses conference acronym (lowercase)
             Assert.True(Directory.Exists(Path.Combine(_archivePath, "37c3")));
-            
+
             // Season folder uses "Season XX" format
             Assert.True(Directory.Exists(Path.Combine(_archivePath, "37c3", "Season 01")));
         }
@@ -200,28 +200,28 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3", "36c3", "35c3");
-            
+
             var events37c3 = new EventDto[]
             {
                 CreateTestEvent(guid: "37c3-1", title: "37C3 Event", date: "2023-12-28")
             };
-            
+
             var events36c3 = new EventDto[]
             {
                 CreateTestEvent(guid: "36c3-1", title: "36C3 Event", date: "2019-12-28")
             };
-            
+
             var events35c3 = Array.Empty<EventDto>();
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events37c3);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(36, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events36c3);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(35, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events35c3);
 
@@ -234,7 +234,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Assert.True(Directory.Exists(Path.Combine(_archivePath, "37c3")));
             Assert.True(Directory.Exists(Path.Combine(_archivePath, "36c3")));
             Assert.False(Directory.Exists(Path.Combine(_archivePath, "35c3"))); // No events = no folder
-            
+
             Assert.Equal(2, result.ConferencesProcessed);
             Assert.Equal(2, result.FilesCreated);
         }
@@ -254,7 +254,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events);
 
@@ -291,12 +291,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3", "empty-conf", "36c3");
-            
+
             var events37c3 = new EventDto[]
             {
                 CreateTestEvent(guid: "37c3-1", title: "Event", date: "2023-12-27")
             };
-            
+
             var events36c3 = new EventDto[]
             {
                 CreateTestEvent(guid: "36c3-1", title: "Event", date: "2019-12-27")
@@ -304,10 +304,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events37c3);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(36, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events36c3);
 
@@ -320,7 +320,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             Assert.True(Directory.Exists(Path.Combine(_archivePath, "37c3")));
             Assert.True(Directory.Exists(Path.Combine(_archivePath, "36c3")));
             Assert.False(Directory.Exists(Path.Combine(_archivePath, "empty-conf")));
-            
+
             Assert.Equal(2, result.ConferencesProcessed);
         }
 
@@ -343,7 +343,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             _apiClientMock.SetupSequence(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences)
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.SetupSequence(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(existingEvents)
                 .ReturnsAsync(newEvents);
@@ -364,7 +364,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             var seasonPath = Path.Combine(_archivePath, "37c3", "Season 01");
             var existingStrmPath = Path.Combine(seasonPath, "existing-event-existing-1.strm");
-            
+
             Assert.True(File.Exists(existingStrmPath));
 
             // Act - Second run with new events
@@ -373,7 +373,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             // Existing file should still exist
             Assert.True(File.Exists(existingStrmPath));
-            
+
             // New file should be created
             var newSeasonPath = Path.Combine(_archivePath, "37c3", "Season 02");
             var newStrmPath = Path.Combine(newSeasonPath, "new-event-new-1.strm");
@@ -385,7 +385,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3");
-            
+
             var initialEvents = new EventDto[]
             {
                 CreateTestEvent(guid: "event-1", title: "Keep This", date: "2023-12-28"),
@@ -400,7 +400,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             _apiClientMock.SetupSequence(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences)
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.SetupSequence(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(initialEvents)
                 .ReturnsAsync(updatedEvents);
@@ -439,12 +439,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3", "36c3");
-            
+
             var events37c3 = new EventDto[]
             {
                 CreateTestEvent(guid: "1", title: "Event 1", date: "2023-12-27")
             };
-            
+
             var events36c3 = new EventDto[]
             {
                 CreateTestEvent(guid: "2", title: "Event 2", date: "2019-12-27")
@@ -452,10 +452,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events37c3);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(36, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events36c3);
 
@@ -489,7 +489,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3", "36c3");
-            
+
             // Dec 27 -> dayNumber=1 (Season 01), Dec 28 -> dayNumber=2 (Season 02)
             // With conferenceFirstDay=Dec 27, events are offset from day 1
             var events37c3 = new EventDto[]
@@ -498,7 +498,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 CreateTestEvent(guid: "2", title: "Event 2", date: "2023-12-27"),
                 CreateTestEvent(guid: "3", title: "Event 3", date: "2023-12-28")
             };
-            
+
             var events36c3 = new EventDto[]
             {
                 CreateTestEvent(guid: "4", title: "Event 4", date: "2019-12-28"),
@@ -507,10 +507,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events37c3);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(36, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events36c3);
 
@@ -531,7 +531,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3", "36c3", "35c3");
-            
+
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
 
@@ -561,7 +561,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3", "36c3");
-            
+
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
 
@@ -609,7 +609,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events);
 
@@ -638,7 +638,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3");
-            
+
             // Dec 28 -> Season 01, Dec 29 -> Season 02, Dec 30 -> Season 03
             var events = new EventDto[]
             {
@@ -651,7 +651,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events);
 
@@ -662,13 +662,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             // Assert
             var basePath = Path.Combine(_archivePath, "37c3");
-            
+
             // Season 01 (December 28) - 3 events
             Assert.True(Directory.Exists(Path.Combine(basePath, "Season 01")));
-            
+
             // Season 02 (December 29) - 1 event
             Assert.True(Directory.Exists(Path.Combine(basePath, "Season 02")));
-            
+
             // Season 03 (December 30) - 1 event
             Assert.True(Directory.Exists(Path.Combine(basePath, "Season 03")));
         }
@@ -678,7 +678,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var conferences = CreateTestConferences("37c3");
-            
+
             // Dec 28 -> Season 01, null/invalid dates -> series path directly
             var events = new EventDto[]
             {
@@ -689,7 +689,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             _apiClientMock.Setup(x => x.GetConferencesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(conferences);
-            
+
             _apiClientMock.Setup(x => x.GetEventsAsync(37, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(events);
 
@@ -739,7 +739,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 {
                     id = 0;
                 }
-                
+
                 conferences.Add(new ConferenceDto
                 {
                     Id = id,

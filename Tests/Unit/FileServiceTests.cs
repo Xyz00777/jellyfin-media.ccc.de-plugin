@@ -189,7 +189,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var url = "https://example.com/video.mp4";
             var destination = Path.Combine(_testDownloadPath, "video.mp4");
-            
+
             // Pre-create file with old content
             Directory.CreateDirectory(_testDownloadPath);
             await File.WriteAllTextAsync(destination, "old content");
@@ -332,7 +332,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var url = "https://example.com/video.mp4";
             HttpMethod? capturedMethod = null;
-            
+
             var httpMessageHandler = new Mock<HttpMessageHandler>();
             httpMessageHandler
                 .Protected()
@@ -422,7 +422,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 // File is locked
                 // Act - Should not throw, should log warning
                 var exception = Record.Exception(() => _fileService.DeleteFile(filePath));
-                
+
                 // Assert - Implementation should catch IOException and not rethrow
                 // If it throws, test will fail showing the implementation needs better error handling
                 // This test documents expected behavior

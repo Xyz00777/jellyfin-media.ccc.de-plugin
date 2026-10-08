@@ -104,7 +104,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public void SelectBestLanguage_handles_null_available_languages()
         {
             // Arrange
-            List<string> availableLanguages = null;
+            List<string>? availableLanguages = null;
             var preferences = new List<string> { "en" };
 
             // Act
@@ -119,7 +119,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var availableLanguages = new List<string> { "en", "de" };
-            List<string> preferences = null;
+            List<string>? preferences = null;
 
             // Act
             var result = _selector.SelectBestLanguage(availableLanguages, preferences);
@@ -150,7 +150,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public void IsLanguageMatch_matches_with_country_code()
         {
             // "en" preference matches "en-US", "en-GB"
-            
+
             // Test 1: en matches en-US
             var result1 = _selector.IsLanguageMatch("en-US", "en");
             Assert.True(result1);
@@ -289,7 +289,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public void SelectBestSubtitleLanguage_returns_null_for_null_available()
         {
             // Arrange
-            List<string> availableLanguages = null;
+            List<string>? availableLanguages = null;
             var preferences = new List<string> { "en" };
 
             // Act

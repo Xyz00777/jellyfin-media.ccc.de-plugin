@@ -190,7 +190,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             }
 
             await _userDataManager.PersistAsync(userId.Value).ConfigureAwait(false);
-            
+
             return Ok();
         }
 
@@ -220,7 +220,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
 
             _userDataManager.RemoveFromWatchlist(userId.Value, eventGuid);
             await _userDataManager.PersistAsync(userId.Value).ConfigureAwait(false);
-            
+
             return Ok();
         }
 

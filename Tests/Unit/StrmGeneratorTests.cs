@@ -3,11 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using Moq;
-using Xunit;
 using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Services;
+using Moq;
+using Xunit;
 
 namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 {
@@ -67,6 +67,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             var result = await _strmGenerator.GenerateStrmAsync(conference, evt, CancellationToken.None);
 
+            Assert.NotNull(result);
             var directory = Path.GetDirectoryName(result.FilePath)!;
             Assert.Empty(Directory.GetFiles(directory, "*.tmp"));
         }
@@ -228,6 +229,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var result2 = await _strmGenerator.GenerateStrmAsync(conference, evt, CancellationToken.None);
 
             // Assert
+            Assert.NotNull(result1);
+            Assert.NotNull(result2);
             Assert.Equal(result1.FilePath, result2.FilePath);
             var content = await File.ReadAllTextAsync(result2.FilePath);
             Assert.Equal("https://example.com/new-video.mp4", content.Trim());

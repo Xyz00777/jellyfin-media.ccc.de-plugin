@@ -24,14 +24,14 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests
         {
             // Arrange
             Assert.True(File.Exists(CsprojPath), $"Project file {CsprojPath} should exist");
-            
+
             // Act
             var csprojContent = File.ReadAllText(CsprojPath);
             var xdoc = XDocument.Parse(csprojContent);
             var project = xdoc.Element("Project");
             var propertyGroup = project?.Element("PropertyGroup");
             var targetFramework = propertyGroup?.Element("TargetFramework");
-            
+
             // Assert
             Assert.NotNull(targetFramework);
             Assert.Equal("net10.0", targetFramework?.Value);
@@ -42,13 +42,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests
         {
             // Arrange
             Assert.True(File.Exists(CsprojPath), $"Project file {CsprojPath} should exist");
-            
+
             // Act
             var csprojContent = File.ReadAllText(CsprojPath);
             var xdoc = XDocument.Parse(csprojContent);
             var project = xdoc.Element("Project");
             var itemGroups = project?.Elements("ItemGroup");
-            
+
             var jellyfinPackages = itemGroups?
                 .Elements("PackageReference")
                 .Where(pr => pr.Attribute("Include")?.Value.StartsWith("Jellyfin.") == true)
@@ -57,19 +57,19 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests
             // Assert
             Assert.NotNull(jellyfinPackages);
             Assert.NotEmpty(jellyfinPackages);
-            
+
             foreach (var package in jellyfinPackages)
             {
                 // Check for ExcludeAssets as either a child element or attribute
                 var excludeAssetsElement = package.Element("ExcludeAssets");
                 var excludeAssetsAttribute = package.Attribute("ExcludeAssets");
-                
-                var hasExcludeRuntime = (excludeAssetsElement != null && 
+
+                var hasExcludeRuntime = (excludeAssetsElement != null &&
                     excludeAssetsElement.Value.IndexOf("runtime", StringComparison.OrdinalIgnoreCase) >= 0) ||
-                    (excludeAssetsAttribute != null && 
+                    (excludeAssetsAttribute != null &&
                     excludeAssetsAttribute.Value.IndexOf("runtime", StringComparison.OrdinalIgnoreCase) >= 0);
-                
-                Assert.True(hasExcludeRuntime, 
+
+                Assert.True(hasExcludeRuntime,
                     $"Jellyfin package '{package.Attribute("Include")?.Value}' should exclude runtime assets. " +
                     "Add <ExcludeAssets>runtime</ExcludeAssets> as a child element.");
             }

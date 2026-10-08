@@ -148,13 +148,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             var filePath = Path.Combine(_testDataPath, "plugins", "ccc-media", "data", $"user-{userId}.json");
             Assert.True(File.Exists(filePath));
-            
+
             var json = await File.ReadAllTextAsync(filePath);
             var loadedUserData = JsonSerializer.Deserialize<UserData>(json, new JsonSerializerOptions
             {
                 Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
             });
-            
+
             Assert.NotNull(loadedUserData);
             Assert.Equal(userId, loadedUserData!.UserId);
             Assert.Equal(2, loadedUserData.Watchlist.Count);
@@ -166,7 +166,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var userDataManager = CreateUserDataManager();
             var userId = Guid.NewGuid();
-            
+
             var initialData = new UserData
             {
                 UserId = userId,
@@ -177,7 +177,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
-            
+
             userDataManager.SaveUserData(userId, initialData);
 
             // Act - Update with new data
@@ -191,7 +191,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 CreatedAt = initialData.CreatedAt,
                 UpdatedAt = DateTime.UtcNow
             };
-            
+
             userDataManager.SaveUserData(userId, updatedData);
 
             // Assert
@@ -519,12 +519,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 {
                     userDataManager.AddToWatchlistIfMissing(userId, $"event-{index}");
                 }));
-                
+
                 tasks.Add(Task.Run(() =>
                 {
                     userDataManager.GetWatchlist(userId);
                 }));
-                
+
                 tasks.Add(Task.Run(() =>
                 {
                     userDataManager.IsOnWatchlist(userId, $"event-{index}");
@@ -560,7 +560,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             var filePath = Path.Combine(_testDataPath, "plugins", "ccc-media", "data", $"user-{userId}.json");
             Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
-            
+
             var json = JsonSerializer.Serialize(userData, new JsonSerializerOptions { WriteIndented = true });
             await File.WriteAllTextAsync(filePath, json);
 
@@ -609,7 +609,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var userData = userDataManager.GetUserData(userId);
             Assert.NotNull(userData);
             Assert.Empty(userData.Watchlist);
-            
+
             _loggerMock.Verify(
                 x => x.Log(
                     LogLevel.Warning,
@@ -635,7 +635,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Assert
             var expectedDir = Path.Combine(_testDataPath, "plugins", "ccc-media", "data");
             Assert.True(Directory.Exists(expectedDir));
-            
+
             var expectedFile = Path.Combine(expectedDir, $"user-{userId}.json");
             Assert.True(File.Exists(expectedFile));
         }
@@ -758,7 +758,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
         #endregion
 
-[Fact]
+        [Fact]
         public async Task Persisted_user_data_round_trips_the_display_name()
         {
             // PersistAsync writes an explicit snapshot, so a new field is silently dropped

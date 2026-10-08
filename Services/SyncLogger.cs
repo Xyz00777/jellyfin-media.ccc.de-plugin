@@ -50,8 +50,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         {
             lock (_lock)
             {
-                var entry = _history.FirstOrDefault(e => 
-                    e.ConferenceAcronym == conferenceAcronym && 
+                var entry = _history.FirstOrDefault(e =>
+                    e.ConferenceAcronym == conferenceAcronym &&
                     e.Status == SyncStatus.Started);
 
                 if (entry != null)
@@ -67,8 +67,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         {
             lock (_lock)
             {
-                var entry = _history.FirstOrDefault(e => 
-                    e.ConferenceAcronym == conferenceAcronym && 
+                var entry = _history.FirstOrDefault(e =>
+                    e.ConferenceAcronym == conferenceAcronym &&
                     e.Status == SyncStatus.Started);
 
                 if (entry != null)
@@ -180,7 +180,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             catch (JsonException ex)
             {
                 _logger.LogWarning(ex, "Failed to parse sync logs from {FilePath}. Starting with empty history.", filePath);
-                
+
                 lock (_lock)
                 {
                     _history.Clear();

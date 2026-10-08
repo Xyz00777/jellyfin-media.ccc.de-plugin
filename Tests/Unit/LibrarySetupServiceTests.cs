@@ -34,7 +34,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 _libraryManagerMock.Object,
                 _applicationPathsMock.Object,
                 _loggerMock.Object);
-            
+
             // Assert
             Assert.IsAssignableFrom<Microsoft.Extensions.Hosting.IHostedService>(service);
         }
@@ -55,7 +55,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 _libraryManagerMock.Object,
                 _applicationPathsMock.Object,
                 _loggerMock.Object);
-            
+
             // Act & Assert - no exception thrown
             await service.StartAsync(CancellationToken.None);
         }
@@ -68,10 +68,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 _libraryManagerMock.Object,
                 _applicationPathsMock.Object,
                 _loggerMock.Object);
-            
+
             // Act
             await service.StopAsync(CancellationToken.None);
-            
+
             // Assert - no exception thrown
         }
 

@@ -70,7 +70,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             }
 
             // Check if "und" (undefined) is available - treat it as a valid fallback
-            var undMatch = availableLanguages.FirstOrDefault(a => 
+            var undMatch = availableLanguages.FirstOrDefault(a =>
                 string.Equals(a, "und", StringComparison.OrdinalIgnoreCase));
             if (undMatch != null)
             {

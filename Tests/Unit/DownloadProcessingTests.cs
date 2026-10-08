@@ -53,15 +53,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var item = CreateTestItem();
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(item.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     item.RecordingUrl,
@@ -69,7 +69,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(item.DestinationPath);
-            
+
             _queueMock
                 .Setup(x => x.MarkCompletedAsync(item.Id))
                 .Returns(Task.CompletedTask);
@@ -94,16 +94,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var item = CreateTestItem();
             var callOrder = new List<string>();
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(item.Id))
                 .Callback(() => callOrder.Add("MarkInProgress"))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -112,7 +112,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<CancellationToken>()))
                 .Callback(() => callOrder.Add("Download"))
                 .ReturnsAsync("downloaded");
-            
+
             _queueMock
                 .Setup(x => x.MarkCompletedAsync(item.Id))
                 .Returns(Task.CompletedTask);
@@ -129,15 +129,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var item = CreateTestItem();
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(item.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -145,7 +145,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync("downloaded");
-            
+
             _queueMock
                 .Setup(x => x.MarkCompletedAsync(item.Id))
                 .Returns(Task.CompletedTask);
@@ -163,15 +163,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var item = CreateTestItem();
             var errorMessage = "Network timeout";
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(item.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -179,7 +179,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new HttpRequestException(errorMessage));
-            
+
             _queueMock
                 .Setup(x => x.MarkFailedAsync(item.Id, It.IsAny<string>()))
                 .Returns(Task.CompletedTask);
@@ -198,17 +198,17 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var failedItem = CreateTestItem(eventGuid: "event-failed");
             var successItem = CreateTestItem(eventGuid: "event-success");
             var dequeueCalls = 0;
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .Callback(() => dequeueCalls++)
                 .ReturnsAsync(() => dequeueCalls == 1 ? failedItem : successItem);
-            
+
             // First item fails
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(failedItem.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     failedItem.RecordingUrl,
@@ -216,16 +216,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new HttpRequestException("Failed"));
-            
+
             _queueMock
                 .Setup(x => x.MarkFailedAsync(failedItem.Id, It.IsAny<string>()))
                 .Returns(Task.CompletedTask);
-            
+
             // Second item succeeds
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(successItem.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     successItem.RecordingUrl,
@@ -233,7 +233,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync("downloaded");
-            
+
             _queueMock
                 .Setup(x => x.MarkCompletedAsync(successItem.Id))
                 .Returns(Task.CompletedTask);
@@ -261,16 +261,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 CreateTestItem(eventGuid: "event-3"),
                 CreateTestItem(eventGuid: "event-4")
             };
-            
+
             var dequeueIndex = 0;
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(() => dequeueIndex < items.Count ? items[dequeueIndex++] : null);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(It.IsAny<Guid>()))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -288,7 +288,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     Interlocked.Decrement(ref currentConcurrent);
                 })
                 .ReturnsAsync("downloaded");
-            
+
             _queueMock
                 .Setup(x => x.MarkCompletedAsync(It.IsAny<Guid>()))
                 .Returns(Task.CompletedTask);
@@ -310,7 +310,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             await Task.WhenAll(tasks);
 
             // Assert
-            Assert.True(maxObservedConcurrent <= maxConcurrent, 
+            Assert.True(maxObservedConcurrent <= maxConcurrent,
                 $"Observed {maxObservedConcurrent} concurrent downloads, but limit is {maxConcurrent}");
         }
 
@@ -318,11 +318,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task ProcessQueueAsync_respects_cancellation_token()
         {
             var cts = new CancellationTokenSource();
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(CreateTestItem());
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(It.IsAny<Guid>()))
                 .Returns(Task.CompletedTask);
@@ -365,15 +365,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var item = CreateTestItem(
                 recordingUrl: "https://example.com/video.mp4",
                 destinationPath: "/tmp/downloads/video.mp4");
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(item.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     item.RecordingUrl,
@@ -381,7 +381,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync(item.DestinationPath);
-            
+
             _queueMock
                 .Setup(x => x.MarkCompletedAsync(item.Id))
                 .Returns(Task.CompletedTask);
@@ -405,19 +405,19 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var item = CreateTestItem();
             var progressValues = new List<double>();
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(item.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _queueMock
                 .Setup(x => x.ReportProgress(item.Id, It.IsAny<double>()))
                 .Callback<Guid, double>((id, progress) => progressValues.Add(progress));
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -434,7 +434,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     progress?.Report(100);
                 })
                 .ReturnsAsync("downloaded");
-            
+
             _queueMock
                 .Setup(x => x.MarkCompletedAsync(item.Id))
                 .Returns(Task.CompletedTask);
@@ -454,19 +454,19 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             // Arrange
             var item = CreateTestItem(
                 destinationPath: "/tmp/new-dir/sub-dir/video.mp4");
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(item.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.EnsureDirectoryExists(It.IsAny<string>()))
                 .Callback<string>(path => Directory.CreateDirectory(path));
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -474,7 +474,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync("downloaded");
-            
+
             _queueMock
                 .Setup(x => x.MarkCompletedAsync(item.Id))
                 .Returns(Task.CompletedTask);
@@ -493,15 +493,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var item = CreateTestItem();
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(item.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -509,7 +509,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new HttpRequestException("404 Not Found", null, HttpStatusCode.NotFound));
-            
+
             _queueMock
                 .Setup(x => x.MarkFailedAsync(item.Id, It.Is<string>(s => s.Contains("404"))))
                 .Returns(Task.CompletedTask);
@@ -528,15 +528,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var item = CreateTestItem();
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(item.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -544,7 +544,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new HttpRequestException("500 Internal Server Error", null, HttpStatusCode.InternalServerError));
-            
+
             _queueMock
                 .Setup(x => x.MarkFailedAsync(item.Id, It.IsAny<string>()))
                 .Returns(Task.CompletedTask);
@@ -562,15 +562,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task ProcessQueueAsync_handles_network_timeout()
         {
             var item = CreateTestItem();
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(item.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -591,15 +591,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var item = CreateTestItem();
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(item.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -607,7 +607,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new IOException("No space left on device"));
-            
+
             _queueMock
                 .Setup(x => x.MarkFailedAsync(item.Id, It.IsAny<string>()))
                 .Returns(Task.CompletedTask);
@@ -625,15 +625,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         public async Task ProcessQueueAsync_deletes_partial_file_on_failure()
         {
             var item = CreateTestItem(destinationPath: "/tmp/partial.mp4");
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(item.Id))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .SetupSequence(x => x.FileExists(item.DestinationPath))
                 .Returns(false)
@@ -646,7 +646,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new IOException("Download failed"));
-            
+
             _queueMock
                 .Setup(x => x.MarkFailedAsync(item.Id, It.IsAny<string>()))
                 .Returns(Task.CompletedTask);
@@ -663,11 +663,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             // Arrange
             var item = CreateTestItem(destinationPath: "/tmp/existing.mp4");
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(item);
-            
+
             _fileServiceMock
                 .Setup(x => x.FileExists(item.DestinationPath))
                 .Returns(true);
@@ -687,7 +687,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()),
                 Times.Never);
-            
+
             _queueMock.Verify(
                 x => x.MarkCompletedAsync(item.Id),
                 Times.Once);
@@ -716,16 +716,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             var item = CreateTestItem();
             var processingStarted = new TaskCompletionSource<bool>();
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .Callback(() => processingStarted.SetResult(true))
                 .ReturnsAsync(item);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(It.IsAny<Guid>()))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -733,13 +733,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync("downloaded");
-            
+
             _queueMock
                 .Setup(x => x.MarkCompletedAsync(It.IsAny<Guid>()))
                 .Returns(Task.CompletedTask);
 
             await _service.StartAsync(CancellationToken.None);
-            
+
             using var cts = new CancellationTokenSource(5000);
             try
             {
@@ -749,7 +749,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             {
                 Assert.Fail("Processing loop should have started within timeout");
             }
-            
+
             await _service.StopAsync(CancellationToken.None);
         }
 
@@ -783,7 +783,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             var processCallCount = 0;
             var secondCallTcs = new TaskCompletionSource<bool>();
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .Callback(() =>
@@ -806,7 +806,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             }
 
             Assert.True(processCallCount >= 2, "Process loop should run multiple times");
-            
+
             await _service.StopAsync(CancellationToken.None);
         }
 
@@ -816,7 +816,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             var dequeueCallCount = 0;
             var emptyQueueReturnCount = 0;
             var firstDequeueTcs = new TaskCompletionSource<bool>();
-            
+
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .Callback(() =>
@@ -833,11 +833,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     }
                     return null;
                 });
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(It.IsAny<Guid>()))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -845,7 +845,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     It.IsAny<IProgress<double>>(),
                     It.IsAny<CancellationToken>()))
                 .ReturnsAsync("downloaded");
-            
+
             _queueMock
                 .Setup(x => x.MarkCompletedAsync(It.IsAny<Guid>()))
                 .Returns(Task.CompletedTask);
@@ -878,16 +878,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 CreateTestItem(eventGuid: "event-2"),
                 CreateTestItem(eventGuid: "event-3")
             };
-            
+
             var dequeueIndex = 0;
             _queueMock
                 .Setup(x => x.DequeueAsync())
                 .ReturnsAsync(() => dequeueIndex < items.Count ? items[dequeueIndex++] : null);
-            
+
             _queueMock
                 .Setup(x => x.MarkInProgressAsync(It.IsAny<Guid>()))
                 .Returns(Task.CompletedTask);
-            
+
             _fileServiceMock
                 .Setup(x => x.DownloadFileAsync(
                     It.IsAny<string>(),
@@ -903,7 +903,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     }
                 })
                 .ReturnsAsync("downloaded");
-            
+
             _queueMock
                 .Setup(x => x.MarkCompletedAsync(It.IsAny<Guid>()))
                 .Returns(Task.CompletedTask);

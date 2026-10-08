@@ -1,7 +1,7 @@
-using Xunit;
 using System.Collections.Generic;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Services;
+using Xunit;
 
 namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 {
