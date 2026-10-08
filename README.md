@@ -115,12 +115,22 @@ for one:
 
 1. Open any talk and choose **... > Subtitles > Search for subtitles**.
 2. Tracks published by media.ccc.de appear as **Media.CCC.de** in the list.
-3. Pick one. Jellyfin downloads it and stores it beside the `.strm`, after which
-   it behaves like any local subtitle: available to every client, selectable,
-   and remembered across restarts.
+3. Picking one stores it beside the `.strm`, after which it behaves like any
+   local subtitle: available to every client, selectable, and remembered
+   across restarts. An already downloaded track is never re-fetched.
 
 About a third of talks have a subtitle published. Only real subtitle tracks are
 offered, never video or audio.
+
+> **Temporary workaround.** Jellyfin 12.2 cannot save subtitles for remote
+> `.strm` items: `SubtitleManager.TrySaveSubtitle` throws a
+> `NullReferenceException`, and both the download and upload endpoints answer
+> `204` while writing nothing. Until that is fixed upstream
+> ([jellyfin/jellyfin#18352](https://github.com/jellyfin/jellyfin/issues/18352)),
+> this plugin writes the sidecar itself during the search and notifies the
+> library monitor so the scanner registers it. The plugin logs a `TEMPORARY:`
+> warning on every save. This must be removed once the upstream issue is
+> resolved.
 
 The `Download Subtitles` setting still pre-fetches subtitles for every talk in
 one sync, which is only useful for seeding a library up front.
