@@ -62,7 +62,15 @@ build_release() {
 
 package() {
     echo -e "${GREEN}Packaging plugin for distribution...${NC}"
-    local version="1.1.0"
+    # Single source of truth, matching scripts/check-version.sh and the release workflow,
+    # so a locally built package is never named after a stale version.
+    local version
+    version="$(sed -nE 's/^[[:space:]]*<Version>([^<]+)<\/Version>.*/\1/p' \
+        "$SCRIPT_DIR/Jellyfin.Plugin.MediaCccDe.csproj" | head -n1)"
+    if [[ -z "$version" ]]; then
+        echo -e "${RED}ERROR: could not read <Version> from Jellyfin.Plugin.MediaCccDe.csproj${NC}"
+        exit 1
+    fi
     mkdir -p "$SCRIPT_DIR/dist"
 
     cp "$SCRIPT_DIR/bin/Release/net10.0/Jellyfin.Plugin.MediaCccDe.dll" "$SCRIPT_DIR/dist/"

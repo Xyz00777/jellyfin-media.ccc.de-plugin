@@ -17,9 +17,9 @@ Jellyfin 12's dashboard renders plugin pages but does not execute their page scr
 
 | Plugin version | Jellyfin | .NET |
 |----------------|----------|------|
-| 1.1.0          | 12.2+    | 10   |
+| 1.1.2          | 12.2+    | 10   |
 
-Plugin 1.1.0 targets Jellyfin 12.2+ and .NET 10. It is not supported on Jellyfin 10.11: this build compiles against the Jellyfin 12.x API surface. A Jellyfin 10.11 build would need `Jellyfin.Controller` 10.11.x and `TargetFramework` `net9.0`; no such build is published.
+Plugin 1.1.2 targets Jellyfin 12.2+ and .NET 10. It is not supported on Jellyfin 10.11: this build compiles against the Jellyfin 12.x API surface. A Jellyfin 10.11 build would need `Jellyfin.Controller` 10.11.x and `TargetFramework` `net9.0`; no such build is published.
 
 The plugin project references `Jellyfin.Controller` and `Jellyfin.Model` 12.2.0, with runtime assets excluded. `meta.json` declares `targetAbi` `12.2.0.0`. Keep `targetAbi` in sync with the `Jellyfin.Controller` package version. A server cannot satisfy a reference to an assembly newer than the one it ships. Declaring a lower `targetAbi` can make the server accept the plugin, then disable it at load time with `Could not load file or assembly 'MediaBrowser.Controller'`. Supporting an older 12.x server requires building against that server's package version, not just lowering `targetAbi`.
 

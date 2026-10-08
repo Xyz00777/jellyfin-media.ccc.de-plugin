@@ -1,6 +1,6 @@
 {
   "category": "Metadata",
-  "changelog": "Adds a plugin-repository manifest.json, so the plugin can be installed from Dashboard > Plugins > Repositories instead of only by unpacking a ZIP. The manifest now reports the same four-part version as meta.json. Still built against Jellyfin.Controller/Model 12.2.0 on net10.0 and requires Jellyfin 12.2 or newer.",
+  "changelog": "Security: refuse cleartext credential submission outside loopback and issue every plugin cookie Secure, HttpOnly and SameSite=Strict. Plugin sessions are re-checked against Jellyfin, so disabling or deleting an account revokes access immediately, and the settings access token is no longer written to the server log. Watchlist downloads are bounded by per-user and server-wide limits, a per-file size cap and a reserved free-space margin. Fixes the per-user identification handshake, which could never succeed on Jellyfin 12.2, downloads that saved a JSON descriptor instead of the recording, and a library-registration race that failed the first download for every account. Still built against Jellyfin.Controller/Model 12.2.0 on net10.0 and requires Jellyfin 12.2 or newer.",
   "name": "Media.CCC.de",
   "guid": "e225c91a-ef11-41ca-b913-6491f15c2992",
   "description": "Jellyfin plugin for media.ccc.de conference recordings",
@@ -8,5 +8,5 @@
   "owner": "Xyz00777",
   "targetAbi": "12.2.0.0",
   "timestamp": "2026-10-07T00:00:00.0000000Z",
-  "version": "1.1.1.0"
+  "version": "1.1.2.0"
 }

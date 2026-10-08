@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are provided for the current published plugin version line, `1.1.0`, which requires Jellyfin 12.2 or newer and .NET 10.
+Security fixes are provided for the current published plugin version line, `1.1.2`, which requires Jellyfin 12.2 or newer and .NET 10.
 
 ## Security details
 
