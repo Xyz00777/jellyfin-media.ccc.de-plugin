@@ -8,19 +8,16 @@
 <div class="verticalSection" style="max-width:44rem;margin:0 auto;padding:1.5rem;">
     <h2 style="font-size:1.3rem;margin:0 0 .5rem;">MediaCCC Settings</h2>
     <p style="color:#999;">
-        Jellyfin 12 renders plugin pages without running their scripts, so this page cannot
-        read or save your personal preferences.
+        Jellyfin 12 renders plugin pages without running their scripts. These pages are now
+        served by the plugin itself.
     </p>
-    <p style="color:#999;">
-        Per-user preferences are still applied to recording selection, but they have to be set
-        through the plugin API, for example:
-    </p>
-    <p style="background:#1c1c1c;padding:.75rem 1rem;border-radius:.25rem;overflow-x:auto;">
-        <code>POST /media_ccc/languages/audio<br />["en", "de"]</code>
+    <p>
+        <a href="/media_ccc/settings/languages" style="display:inline-block;padding:.6rem 1.4rem;border-radius:.25rem;background:#00a4dc;color:#04121c;font-weight:700;text-decoration:none;">Your Language Preferences</a>
     </p>
     <p style="color:#999;font-size:.85rem;">
-        To set a server-wide default instead, use
-        <a href="/media_ccc/settings">Media.CCC.de Settings</a>.
+        Administrator settings, including subtitle downloads and server-wide language
+        defaults, are on the
+        <a href="/media_ccc/settings">Media.CCC.de Settings</a> page.
     </p>
 </div>
 </body>

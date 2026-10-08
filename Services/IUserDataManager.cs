@@ -60,6 +60,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         /// </summary>
         void SetPreferredAudioLanguages(Guid userId, List<string> languages);
 
+        void SetUserName(Guid userId, string? name);
+
+        string? GetUserName(Guid userId);
+
         /// <summary>
         /// Gets the user's preferred audio languages.
         /// </summary>

@@ -22,6 +22,8 @@ public class ServiceRegistrator : IPluginServiceRegistrator
 {
     private const string ArchiveFolderName = "archive";
 
+    private const int LocalPort = 8096;
+
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
         serviceCollection.AddHttpClient("MediaCccApi", client =>
@@ -54,6 +56,13 @@ public class ServiceRegistrator : IPluginServiceRegistrator
         });
         serviceCollection.AddSingleton<ISyncLogger, SyncLogger>();
         serviceCollection.AddSingleton<PluginInstanceResolver, PluginInstanceResolver>();
+        serviceCollection.AddSingleton(sp => new JellyfinIdentityVerifier(
+            sp.GetRequiredService<IHttpClientFactory>(),
+            $"http://127.0.0.1:{LocalPort}"));
+        serviceCollection.AddHttpClient(JellyfinIdentityVerifier.VerificationClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
         serviceCollection.AddSingleton(sp => new SettingsAccessTokenStore(
             sp.GetRequiredService<IApplicationPaths>().PluginConfigurationsPath));
         serviceCollection.AddSingleton<IUserDataManager, UserDataManager>();

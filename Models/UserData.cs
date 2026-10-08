@@ -9,6 +9,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Models
     public class UserData
     {
         public Guid UserId { get; set; }
+        public string? Name { get; set; }
         public HashSet<string> Watchlist { get; set; } = new HashSet<string>();
         public HashSet<string> SearchProgress { get; set; } = new HashSet<string>();
         public HashSet<string> PreferredAudioLanguages { get; set; } = new HashSet<string>();

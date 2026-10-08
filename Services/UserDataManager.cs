@@ -130,6 +130,24 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             }
         }
 
+        public void SetUserName(Guid userId, string? name)
+        {
+            lock (_lock)
+            {
+                var userData = GetOrCreateUserData(userId);
+                userData.Name = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+                userData.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        public string? GetUserName(Guid userId)
+        {
+            lock (_lock)
+            {
+                return GetOrCreateUserData(userId).Name;
+            }
+        }
+
         public void SetPreferredAudioLanguages(Guid userId, List<string> languages)
         {
             lock (_lock)
@@ -194,6 +212,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                     snapshot = new UserData
                     {
                         UserId = dataToSave.UserId,
+                        Name = dataToSave.Name,
                         Watchlist = new HashSet<string>(dataToSave.Watchlist),
                         SearchProgress = new HashSet<string>(dataToSave.SearchProgress),
                         PreferredAudioLanguages = new HashSet<string>(dataToSave.PreferredAudioLanguages),

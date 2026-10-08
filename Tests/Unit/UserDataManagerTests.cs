@@ -758,6 +758,44 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
         #endregion
 
+[Fact]
+        public async Task Persisted_user_data_round_trips_the_display_name()
+        {
+            // PersistAsync writes an explicit snapshot, so a new field is silently dropped
+            // unless it is copied across.
+            var userDataManager = CreateUserDataManager();
+            var userId = Guid.NewGuid();
+
+            userDataManager.SetUserName(userId, "admin");
+            await userDataManager.PersistAsync(userId);
+
+            var filePath = Path.Combine(_testDataPath, "plugins", "ccc-media", "data", $"user-{userId}.json");
+            var json = await File.ReadAllTextAsync(filePath);
+            var reloaded = JsonSerializer.Deserialize<UserData>(json);
+
+            Assert.Equal("admin", reloaded!.Name);
+            Assert.Equal("admin", userDataManager.GetUserName(userId));
+        }
+
+        [Fact]
+        public void GetUserName_returns_null_for_an_unnamed_user()
+        {
+            var userDataManager = CreateUserDataManager();
+
+            Assert.Null(userDataManager.GetUserName(Guid.NewGuid()));
+        }
+
+        [Fact]
+        public void SetUserName_normalises_blank_input_to_null()
+        {
+            var userDataManager = CreateUserDataManager();
+            var userId = Guid.NewGuid();
+
+            userDataManager.SetUserName(userId, "  ");
+
+            Assert.Null(userDataManager.GetUserName(userId));
+        }
+
         #region PersistAsync Thread Safety Tests
 
         [Fact]
