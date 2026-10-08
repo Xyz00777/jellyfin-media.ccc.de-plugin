@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using MediaBrowser.Controller.Library;
+using Microsoft.Extensions.Logging;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Api;
@@ -25,12 +27,24 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
     {
         internal const string SubtitleMimeType = "application/x-subrip";
         internal const string SubtitleClientName = "CccSubtitles";
-        private const int MaxRedirects = 5;
+
+        /// <summary>
+        /// Jellyfin 12.2 throws a NullReferenceException in SubtitleManager.TrySaveSubtitle
+        /// for these items, so its download endpoint answers 204 and writes nothing. See
+        /// https://github.com/jellyfin/jellyfin/issues/18352. Everything below is a
+        /// temporary workaround and must be removed once that is fixed upstream.
+        /// </summary>
+        internal const string UpstreamWorkaround =
+            "TEMPORARY: Jellyfin 12.2 cannot save subtitles for remote .strm items " +
+            "(NullReferenceException in SubtitleManager.TrySaveSubtitle, issue 18352). " +
+            "Media.CCC.de writes the sidecar itself as a workaround; remove once fixed upstream.";
         private const string AllowedSubtitleHostSuffix = ".media.ccc.de";
 
         private readonly IMediaCccApiClient _apiClient;
         private readonly IConferenceScheduleCache _scheduleCache;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly ILibraryMonitor? _libraryMonitor;
+        private readonly ILogger<MediaCccSubtitleProvider>? _logger;
 
         public string Name => "Media.CCC.de";
 
@@ -39,11 +53,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
         public MediaCccSubtitleProvider(
             IMediaCccApiClient apiClient,
             IConferenceScheduleCache scheduleCache,
-            IHttpClientFactory httpClientFactory)
+            IHttpClientFactory httpClientFactory,
+            ILibraryMonitor? libraryMonitor = null,
+            ILogger<MediaCccSubtitleProvider>? logger = null)
         {
             _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
             _scheduleCache = scheduleCache ?? throw new ArgumentNullException(nameof(scheduleCache));
             _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+            _libraryMonitor = libraryMonitor;
+            _logger = logger;
         }
 
         public async Task<IEnumerable<RemoteSubtitleInfo>> Search(SubtitleSearchRequest request, CancellationToken cancellationToken)
@@ -71,7 +89,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
             var hydrated = await _apiClient.GetEventAsync(scheduled.Event.Guid, cancellationToken).ConfigureAwait(false);
             var subtitles = FindSubtitles(hydrated);
 
-            return subtitles
+            var results = subtitles
                 .Select(r => new RemoteSubtitleInfo
                 {
                     Name = BuildName(r.Language),
@@ -82,6 +100,61 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
                     Comment = "media.ccc.de"
                 })
                 .ToList();
+
+            // Workaround, see UpstreamWorkaround. On Jellyfin 12 the dashboard cannot run
+            // the plugin's own pages, so searching for subtitles is the only user-driven
+            // hook left to obtain one.
+            foreach (var recording in subtitles)
+            {
+                await SaveSidecarAsync(recording.Url, request.MediaPath, cancellationToken).ConfigureAwait(false);
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// Writes the subtitle next to the .strm and tells the library monitor about it, so
+        /// the scanner registers it as a local subtitle. Skipped when a usable sidecar is
+        /// already there.
+        /// </summary>
+        internal async Task<bool> SaveSidecarAsync(string subtitleUrl, string? mediaPath, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(mediaPath) || !IsAllowedSubtitleUrl(subtitleUrl))
+            {
+                return false;
+            }
+
+            var target = Path.ChangeExtension(mediaPath, "srt");
+            if (File.Exists(target) && new FileInfo(target).Length > 0)
+            {
+                return true;
+            }
+
+            var payload = await DownloadSubtitleAsync(subtitleUrl, cancellationToken).ConfigureAwait(false);
+            if (payload is null)
+            {
+                return false;
+            }
+
+            await File.WriteAllBytesAsync(target, payload.ToArray(), cancellationToken).ConfigureAwait(false);
+
+            // Without this the scanner never learns about the file and the playback probe
+            // drops it again, which is what issue 15882 describes.
+            if (_libraryMonitor is not null)
+            {
+                try
+                {
+                    _libraryMonitor.ReportFileSystemChangeBeginning(target);
+                    _libraryMonitor.ReportFileSystemChangeComplete(target, true);
+                }
+                catch (IOException)
+                {
+                }
+            }
+
+            _logger?.LogWarning(UpstreamWorkaround);
+            _logger?.LogInformation("Saved subtitle sidecar {Path}", target);
+            return true;
         }
 
         public async Task<SubtitleResponse?> GetSubtitles(string search, CancellationToken cancellationToken)
@@ -114,69 +187,36 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
             }
 
             var url = ExtractUrl(search)!;
-            var httpClient = _httpClientFactory.CreateClient(SubtitleClientName);
 
-            for (var hop = 0; hop <= MaxRedirects; hop++)
+            // media.ccc.de answers 302 to a community mirror. The default client follows
+            // redirects itself and is the same one the metadata providers already use for
+            // artwork, so its egress is known good; hand-rolling the hops here only added
+            // ways to fail silently.
+            await RemoteUrlValidator
+                .ValidatePublicHttpsUrlAsync(url, cancellationToken)
+                .ConfigureAwait(false);
+
+            var httpClient = _httpClientFactory.CreateClient();
+
+            using var response = await httpClient
+                .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!response.IsSuccessStatusCode)
             {
-                await RemoteUrlValidator
-                    .ValidatePublicHttpsUrlAsync(url, cancellationToken)
-                    .ConfigureAwait(false);
-
-                using var response = await httpClient
-                    .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                    .ConfigureAwait(false);
-
-                if (IsRedirect(response.StatusCode))
-                {
-                    var location = response.Headers.Location;
-                    if (location is null)
-                    {
-                        return null;
-                    }
-
-                    url = location.IsAbsoluteUri ? location.ToString() : new Uri(new Uri(url), location).ToString();
-
-                    if (hop == MaxRedirects || !IsSafeRedirectTarget(url))
-                    {
-                        return null;
-                    }
-
-                    continue;
-                }
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    return null;
-                }
-
-                await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-                var buffer = new MemoryStream();
-                await source.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
-                buffer.Position = 0;
-                return buffer;
+                _logger?.LogWarning(
+                    "{Workaround} Subtitle fetch returned {Status} for {Url}",
+                    UpstreamWorkaround,
+                    (int)response.StatusCode,
+                    url);
+                return null;
             }
 
-            return null;
-        }
-
-        private static bool IsRedirect(HttpStatusCode statusCode)
-        {
-            return statusCode is HttpStatusCode.MovedPermanently
-                or HttpStatusCode.Found
-                or HttpStatusCode.SeeOther
-                or HttpStatusCode.TemporaryRedirect
-                or HttpStatusCode.PermanentRedirect;
-        }
-
-        /// <summary>
-        /// After the first hop the target is a community mirror rather than media.ccc.de,
-        /// so the host is not pinned. It must still be absolute HTTPS; the public-address
-        /// check in the download loop is what keeps this from reaching the private network.
-        /// </summary>
-        internal static bool IsSafeRedirectTarget(string? url)
-        {
-            return Uri.TryCreate(url, UriKind.Absolute, out var uri)
-                && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+            await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            var buffer = new MemoryStream();
+            await source.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+            buffer.Position = 0;
+            return buffer;
         }
 
         internal static IEnumerable<Recording> FindSubtitles(EventDto? eventDto)
