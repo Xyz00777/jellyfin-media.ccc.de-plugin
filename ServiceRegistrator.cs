@@ -11,6 +11,7 @@ using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Controller.Providers;
+using MediaBrowser.Controller.Subtitles;
 using Jellyfin.Plugin.MediaCccDe.Providers;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
@@ -104,5 +105,7 @@ public class ServiceRegistrator : IPluginServiceRegistrator
             ServiceDescriptor.Singleton<IRemoteImageProvider, MediaCccSeriesProvider>());
         serviceCollection.TryAddEnumerable(
             ServiceDescriptor.Singleton<IRemoteImageProvider, MediaCccEpisodeProvider>());
+        serviceCollection.TryAddEnumerable(
+            ServiceDescriptor.Singleton<ISubtitleProvider, MediaCccSubtitleProvider>());
     }
 }
