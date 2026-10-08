@@ -1,304 +1,267 @@
 # Jellyfin Media.CCC.de Plugin
 
-A Jellyfin plugin that integrates media.ccc.de conference recordings into your Jellyfin server.
+A Jellyfin plugin for conference recordings published on media.ccc.de.
+
+Jellyfin 12's dashboard renders plugin pages but does not execute their page scripts. The plugin therefore serves its pages and forms directly, and dashboard links open those standalone pages.
 
 ## Features
 
-- **Full Conference Library**: Browse and watch all media.ccc.de conference recordings
-- **Automatic Metadata**: Conferences appear as TV Series with Days as Seasons and Talks as Episodes
-- **Personal Watchlist**: Add talks to your personal watchlist for download and offline viewing
-- **Per-User Language Preferences**: Set preferred audio and subtitle languages
-- **Admin Sync Progress**: View sync history and status in the admin panel
-- **Automatic Library Setup**: Creates Archive library automatically on startup
+- Browse conferences and talks in the `CCC Archive` TV library.
+- Add talks to a personal watchlist and download them for offline viewing.
+- Set server-wide audio and subtitle preferences, and per-user language preferences for watchlist downloads.
+- Fetch subtitles on demand, with an optional setting to pre-fetch one selected subtitle during sync.
+- Synchronize archive `.strm` files and inspect sync status and history through the API.
+- Create the `CCC Archive` library automatically on startup when it does not already exist.
 
 ## Compatibility
 
-| Plugin version | Jellyfin | .NET  |
-|----------------|----------|-------|
-| 1.1.0          | 12.2+    | 10.0  |
+| Plugin version | Jellyfin | .NET |
+|----------------|----------|------|
+| 1.1.0          | 12.2+    | 10   |
 
-Plugin 1.1.0 is built against the Jellyfin 12 API and **requires Jellyfin 12.2 or
-newer**. Jellyfin 10.11 is not supported by this version, because Jellyfin 12
-requires .NET 10 and the plugin is compiled against the 12.x API surface. Older
-servers will report the plugin as unsupported and refuse to load it. To stay on
-Jellyfin 10.11 you must build the plugin against `Jellyfin.Controller` 10.11.x
-with `TargetFramework` `net9.0`; no such build is published, so build it from
-source.
+Plugin 1.1.0 targets Jellyfin 12.2+ and .NET 10. It is not supported on Jellyfin 10.11: this build compiles against the Jellyfin 12.x API surface. A Jellyfin 10.11 build would need `Jellyfin.Controller` 10.11.x and `TargetFramework` `net9.0`; no such build is published.
 
-`targetAbi` in `meta.json` must stay in sync with the `Jellyfin.Controller`
-package version in the `.csproj`. The plugin is compiled against version
-`12.2.0.0` of Jellyfin's shared assemblies, and a Jellyfin server cannot satisfy
-a reference to a *newer* assembly than the one it ships: declaring a lower
-`targetAbi` makes the server accept the plugin and then disable it at load time
-with `Could not load file or assembly 'MediaBrowser.Controller'`. Supporting an
-older 12.x server therefore requires building against that server's package
-version, not just lowering `targetAbi`.
+The plugin project references `Jellyfin.Controller` and `Jellyfin.Model` 12.2.0, with runtime assets excluded. `meta.json` declares `targetAbi` `12.2.0.0`. Keep `targetAbi` in sync with the `Jellyfin.Controller` package version. A server cannot satisfy a reference to an assembly newer than the one it ships. Declaring a lower `targetAbi` can make the server accept the plugin, then disable it at load time with `Could not load file or assembly 'MediaBrowser.Controller'`. Supporting an older 12.x server requires building against that server's package version, not just lowering `targetAbi`.
 
 ## Installation
 
-### From Release
+No GitHub release artifacts are published yet. Build from source, then copy the plugin files into Jellyfin's versioned plugin directory.
 
-No release artifacts are published yet, so build the plugin from source (below)
-and install the resulting ZIP.
-
-1. Build the plugin and package it: `./build.sh release`
-2. Go to Jellyfin Dashboard > Plugins
-3. Click the gear icon > Repositories
-4. Add repository and upload `dist/media-ccc-de-plugin-<version>.zip`
-5. Restart Jellyfin
-
-### From Source
+Clone the repository and build the package:
 
 ```bash
-git clone https://github.com/ncc1031/jellyfin_ccc-media-de
+git clone https://github.com/Xyz00777/jellyfin_ccc-media-de.git
 cd jellyfin_ccc-media-de
-dotnet build --configuration Release
+./build.sh release
 ```
 
-Copy both the built DLL and `meta.json` to a versioned Jellyfin plugin directory:
-- Linux: `/var/lib/jellyfin/plugins/`
-- Windows: `C:\ProgramData\Jellyfin\Server\plugins\`
-- macOS: `~/.local/share/jellyfin/plugins/`
+The package is written to `dist/media-ccc-de-plugin-<version>.zip`. It contains `Jellyfin.Plugin.MediaCccDe.dll` and `meta.json`. Alternatively, build and copy both files manually. The DLL is built at `bin/Release/net10.0/Jellyfin.Plugin.MediaCccDe.dll`.
 
-### Fully Automatic Podman Smoke Test
+Jellyfin discovers plugins in a versioned subdirectory. For example, use `Media.CCC.de_<PLUGIN_VERSION>` under the applicable plugins directory, and put the DLL and `meta.json` together there.
 
-With Podman, `curl`, and `jq` installed, run:
+| Operating system | Plugins directory |
+|------------------|-------------------|
+| Linux            | `/var/lib/jellyfin/plugins/` |
+| Windows          | `C:\ProgramData\Jellyfin\Server\plugins\` |
+| macOS            | `~/.local/share/jellyfin/plugins/` |
+
+Restart Jellyfin after installing the files.
+
+### Podman smoke test
+
+The smoke test requires Podman, `curl`, `jq`, and working internet access to media.ccc.de. Run:
 
 ```bash
 bash scripts/podman-smoke-test.sh
 ```
 
-The script builds the release package, starts a disposable Jellyfin `12.2`
-container, installs the plugin into its mounted configuration, creates the
-first administrator through Jellyfin's startup API, authenticates, verifies
-the plugin is loaded, checks an authenticated addon endpoint, verifies
-acronym-based event hydration with recordings, and fetches live conference
-data from `media.ccc.de`. The container and temporary data are removed
-automatically. Set `KEEP_TEST_DATA=1` to retain the data for failure inspection,
-or `SKIP_BUILD=1` to reuse the existing release output.
+The script builds the release package, starts a disposable Jellyfin 12.2 container, installs the plugin into its mounted config, creates the first administrator through Jellyfin's startup API, authenticates, verifies that the plugin loaded, checks an authenticated addon endpoint, verifies acronym-based event hydration with recordings, and fetches live conference data from media.ccc.de. It removes the container and temporary data automatically. Set `KEEP_TEST_DATA=1` to retain temporary data for failure inspection, or `SKIP_BUILD=1` to reuse existing release output.
+
+### Uninstalling and upgrading
+
+Delete the plugin's versioned directory from the plugins folder and restart Jellyfin to uninstall it. To upgrade, install the new files in the versioned directory and restart. Plugin data under `{PluginConfigurationsPath}` and `{DataPath}` is not removed automatically.
 
 ## Configuration
 
-After installation, configure the plugin in Jellyfin Dashboard > Plugins > MediaCCC.de:
+The plugin's configuration page is registered as `MediaCCCDe` and is not in the main menu. The server menu section includes `Browse`, `CCC Watchlist`, and `Language Preferences`. `MediaCCC Settings` and `MediaCCCDe Sync Log` are registered pages but are not main-menu items.
 
-| Setting | Description | Default |
-|---------|-------------|---------|
-| Watchlist Path | Directory for downloaded watchlist videos; empty uses Jellyfin's plugin configuration directory | empty |
-| Preferred Quality | Video quality preference | HD |
-| Preferred Audio Languages | Ordered ISO 639-1 codes; a file containing both of the top two is preferred over either single-language file | empty |
-| Preferred Subtitle Languages | Ordered ISO 639-1 codes, used when downloading subtitles | empty |
-| Sync Interval | How often to check for new content | 6 hours |
-| Download Subtitles | Pre-fetch subtitles for every talk during a sync. Off by default, and no longer required | off |
+| Setting | Type | Default | Details |
+|---------|------|---------|---------|
+| `WatchlistPath` | string | empty | Empty resolves to `{PluginConfigurationsPath}/ccc-media/watchlists`. A set path is resolved relative to `{PluginConfigurationsPath}`. |
+| `PreferredQuality` | string | `hd` (shown as `HD`) | Server-wide preferred quality. |
+| `PreferredAudioLanguages` | list of strings | empty | Server-wide audio language preferences. |
+| `PreferredSubtitleLanguages` | list of strings | empty | Used when pre-fetching subtitles during sync. |
+| `SyncIntervalHours` | integer | `6` | Hours, clamped to the range 1–168. |
+| `DownloadSubtitles` | boolean | `false` | Pre-fetch one selected subtitle sidecar next to each generated `.strm` during a sync. This is independent of on-demand subtitle search. |
 
-### Opening the settings on Jellyfin 12
+### Opening MediaCCC settings
 
-Jellyfin 12's dashboard renders plugin pages but does not execute their scripts, so
-this plugin serves the settings page itself instead:
+Open the standalone settings page:
 
-```
+```text
 http://<your-jellyfin>/media_ccc/settings
 ```
 
-On first use, unlock it with the access token printed in the Jellyfin server log
-when the plugin starts:
+When the plugin starts, the server log prints a line containing a settings URL and the runtime-generated access token. The token is also persisted at `{PluginConfigurationsPath}/settings-access.txt`. Treat it as a secret because it grants access to plugin settings. Paste the token value into the unlock form field and submit; the settings page does not read a `token` query parameter. After a successful unlock, a signed cookie lasts 30 days. Its HMAC key is derived at runtime from the token using SHA-256; no signing secret is committed to the repository.
 
-```
-Media.CCC.de settings can be edited at /media_ccc/settings?token=<token> ...
-```
+### Subtitles
 
-Paste that token into the form once. It is stored in
-`<plugin-config-dir>/settings-access.txt`, unlocks the page for 30 days, and
-should be treated as a secret. ### Subtitles
+Subtitles are fetched on demand by default. Nothing is downloaded until a user asks for a subtitle:
 
-Subtitles are fetched **on demand**, so nothing is downloaded until someone asks
-for one:
+1. Open a talk and choose **... > Subtitles > Search for subtitles**.
+2. Tracks published by media.ccc.de appear under **Media.CCC.de**. Only subtitle MIME types are offered; video and audio recordings are filtered out.
+3. Choose a track. The plugin stores a sidecar next to the `.strm`. It then behaves like a local subtitle: it is available to every client, selectable, and remembered across restarts. An already downloaded non-empty track is never fetched again.
 
-1. Open any talk and choose **... > Subtitles > Search for subtitles**.
-2. Tracks published by media.ccc.de appear as **Media.CCC.de** in the list.
-3. Picking one stores it beside the `.strm`, after which it behaves like any
-   local subtitle: available to every client, selectable, and remembered
-   across restarts. An already downloaded track is never re-fetched.
+About a third of published talks have a subtitle.
 
-About a third of talks have a subtitle published. Only real subtitle tracks are
-offered, never video or audio.
+**Temporary Jellyfin 12.2 workaround:** Jellyfin 12.2 cannot save subtitles for remote `.strm` items. `SubtitleManager.TrySaveSubtitle` throws a `NullReferenceException`, and the download and upload endpoints answer `204` while writing nothing. Until [the upstream issue](https://github.com/jellyfin/jellyfin/issues/18352) is resolved, this plugin writes the sidecar itself during the search and notifies the library monitor so the scanner registers it. The plugin logs a `TEMPORARY:` warning on every save. This workaround must be removed once the upstream issue is resolved.
 
-> **Temporary workaround.** Jellyfin 12.2 cannot save subtitles for remote
-> `.strm` items: `SubtitleManager.TrySaveSubtitle` throws a
-> `NullReferenceException`, and both the download and upload endpoints answer
-> `204` while writing nothing. Until that is fixed upstream
-> ([jellyfin/jellyfin#18352](https://github.com/jellyfin/jellyfin/issues/18352)),
-> this plugin writes the sidecar itself during the search and notifies the
-> library monitor so the scanner registers it. The plugin logs a `TEMPORARY:`
-> warning on every save. This must be removed once the upstream issue is
-> resolved.
-
-The `Download Subtitles` setting still pre-fetches subtitles for every talk in
-one sync, which is only useful for seeding a library up front.
+The optional `DownloadSubtitles` setting is a separate bulk pre-fetch path for seeding a library up front. It is off by default.
 
 ### Per-user language preferences
 
-Each user can set their own audio and subtitle languages at:
+Open the standalone page:
 
-```
+```text
 http://<your-jellyfin>/media_ccc/settings/languages
 ```
 
-The first visit asks for your own Jellyfin API key (Dashboard > Advanced > API
-Keys) so the page can tell which account to save for. The key is checked against
-the server and then discarded; it is never stored or logged. After that a
-signed cookie remembers you for 90 days.
+On the first visit, provide your own Jellyfin API key from Dashboard > Advanced > API Keys. It is posted to `/media_ccc/settings/languages/identify`, verified against the server to identify the account, then discarded. The key is never stored or logged. A signed cookie remembers the identified user for 90 days.
 
-These preferences apply to watchlist downloads. Streaming always uses the single
-shared `.strm` for a talk, so it cannot vary per user; the server-wide defaults
-above decide what that file points at. The same settings are available as
-`GET`/`POST /media_ccc/languages/audio` and `/media_ccc/languages/subtitles`.
+These preferences apply to watchlist downloads. Streaming uses one shared `.strm` per talk and cannot vary by user; the server-wide `PreferredAudioLanguages` setting determines what that `.strm` points to. The preferences are also available through `GET` and `POST` at `/media_ccc/languages/audio` and `/media_ccc/languages/subtitles`. The dashboard's `Language Preferences` menu link opens this standalone page rather than providing a working dashboard form.
 
 ## Usage
 
-### Browse Conferences
+The server menu includes links to **Browse**, **CCC Watchlist**, and **Language Preferences**. The registered `MediaCCC Settings` and `MediaCCCDe Sync Log` pages are not in that menu. Sync API endpoints require an elevated user.
 
-The dashboard pages link to the plugin's own pages. On Jellyfin 12 they are
-plain links rather than interactive forms, because that dashboard does not run
-plugin page scripts.
+`CCC Archive` is a TV library backed by `{PluginConfigurationsPath}/archive`. Per-user watchlist libraries are created for sanitized usernames. During synchronization, stale archive `.strm` files that no longer correspond to anything in the current API response are removed. Downloaded watchlist videos are not automatically cleaned up.
 
-1. Navigate to **Dashboard > MediaCCC.de > Browse**
-2. Browse all available conferences
-3. Click on a conference to see its talks
-4. Talks appear in the Archive library as TV Shows
+### Where downloads land
 
-### Watchlist
-
-1. Add talks to your watchlist from the Browse page
-2. Navigate to **Dashboard > MediaCCC.de > Watchlist**
-3. View download status and manage your list
-4. Downloaded videos appear in your personal watchlist library
-
-### Language Preferences
-
-**Dashboard > MediaCCC.de > Language Preferences** links to
-`/media_ccc/settings/languages`, where you confirm your account once with your
-own Jellyfin API key and then choose your preferred audio and subtitle
-languages. Languages are tried in order when a watchlist talk is downloaded for
-you.
-
-### Sync Log (Admin Only)
-
-1. Navigate to **Dashboard > MediaCCC.de > Sync Log**
-2. View sync history with timestamps
-3. See number of files created per sync
-4. Trigger manual sync if needed
+By default, watchlist downloads go under `{PluginConfigurationsPath}/ccc-media/watchlists/<username>/`. Files are flat in the user's library root, named `<talk-slug>-<event-guid>.<format>`. If a recording has no format, the extension falls back to `mp4`.
 
 ## Architecture
 
-### Library Structure
+### Library structure
 
-```
-Archive Library (streaming)
+```text
+CCC Archive/
 ├── 37C3/
-│   ├── Season 01/           # Day 1
+│   ├── Season 01/           # conference day 1
 │   │   ├── opening.strm
 │   │   └── ...
-│   ├── Season 02/           # Day 2
-│   └── ...
-├── 36C3/
-└── ...
-
-User Watchlist Libraries (downloaded)
-├── username's Watchlist/
-│   ├── conference-acronym/
-│   │   └── talk-slug.mp4
-│   └── ...
+│   └── Season 02/
+└── 36C3/
 ```
 
-### Data Storage
+Day-to-season numbering is derived from event dates relative to a resolved conference anchor day. Season directories are zero-padded as `Season NN`; not every event necessarily maps to a clean numbered season.
 
-All plugin data stored in JSON files under:
-- `{JellyfinData}/plugins/ccc-media/data/`
+The `CCC Archive` library is created automatically on startup as a TV library. Creation is duplicate-safe: it matches on the library name or archive path and skips creation if either already exists. If creation fails, an error is logged saying manual setup may be required.
 
-Files:
-- `user-{guid}.json` - Per-user preferences and watchlist
-- `sync-logs.json` - Sync history for admins
-- `download-queue.json` - Pending downloads
+### Data storage
 
-### API Endpoints
+| What | Path |
+|------|------|
+| Per-user data | `{DataPath}/plugins/ccc-media/data/user-{userId}.json` |
+| Download queue | `{DataPath}/plugins/ccc-media/data/download-queue.json` |
+| Sync history | `{DataPath}/sync-logs.json` |
+| Settings access token | `{PluginConfigurationsPath}/settings-access.txt` |
+| Default watchlist downloads | `{PluginConfigurationsPath}/ccc-media/watchlists/<username>/` |
+| Archive `.strm` tree | `{PluginConfigurationsPath}/archive/` |
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/media_ccc/conferences` | GET | List all conferences |
-| `/media_ccc/conferences/{id}/events` | GET | Get events for conference |
-| `/media_ccc/events/{guid}` | GET | Get single event |
-| `/media_ccc/watchlist` | GET | Get user's watchlist |
-| `/media_ccc/watchlist/add` | POST | Add to watchlist |
-| `/media_ccc/watchlist/remove` | POST | Remove from watchlist |
-| `/media_ccc/sync/trigger` | POST | Trigger manual sync |
-| `/media_ccc/sync/history` | GET | Get sync history |
+Sync history is stored at the `DataPath` root, not in the plugin data directory.
+
+### API endpoints
+
+The `/media_ccc` routes require an authenticated user. The `/media_ccc/sync` routes require an elevated user. The `/media_ccc/settings*` routes are not covered by `[Authorize]`; they use the settings access token or the user API-key handshake instead.
+
+| Method | Endpoint | Access | Description |
+|--------|----------|--------|-------------|
+| GET | `/media_ccc/conferences` | Authenticated | List conferences. |
+| GET | `/media_ccc/conferences/{conferenceId}/events` | Authenticated | List events for a conference. |
+| GET | `/media_ccc/events/{guid}` | Authenticated | Get an event. |
+| GET | `/media_ccc/events/recent` | Authenticated | Get recent events. |
+| POST | `/media_ccc/watchlist/{eventGuid}` | Authenticated | Add an event to the user's watchlist. |
+| DELETE | `/media_ccc/watchlist/{eventGuid}` | Authenticated | Remove an event from the user's watchlist. |
+| GET | `/media_ccc/watchlist` | Authenticated | Get the user's watchlist. |
+| GET | `/media_ccc/languages/audio` | Authenticated | Get audio language preferences. |
+| POST | `/media_ccc/languages/audio` | Authenticated | Set audio language preferences. |
+| GET | `/media_ccc/languages/subtitles` | Authenticated | Get subtitle language preferences. |
+| POST | `/media_ccc/languages/subtitles` | Authenticated | Set subtitle language preferences. |
+| POST | `/media_ccc/sync/trigger` | Elevated user | Trigger synchronization. |
+| GET | `/media_ccc/sync/status` | Elevated user | Get sync status. |
+| GET | `/media_ccc/sync/history` | Elevated user | Get sync history. |
+| DELETE | `/media_ccc/sync/history` | Elevated user | Delete sync history. |
+| GET | `/media_ccc/downloads` | Authenticated | Get the user's download queue. |
+| POST | `/media_ccc/downloads/{eventGuid}` | Authenticated | Enqueue a talk download for the user. |
+| GET | `/media_ccc/settings` | Settings access token | Get plugin settings. |
+| POST | `/media_ccc/settings` | Settings access token | Save plugin settings. |
+| POST | `/media_ccc/settings/unlock` | Settings access token | Unlock settings using the form token. |
+| GET | `/media_ccc/settings/download` | Settings access token | Download settings. |
+| GET | `/media_ccc/settings/languages` | User API-key handshake | Get the language preferences page. |
+| POST | `/media_ccc/settings/languages` | User API-key handshake | Save per-user language preferences. |
+| POST | `/media_ccc/settings/languages/identify` | User API-key handshake | Identify the user using their Jellyfin API key. |
 
 ## Development
 
-### Prerequisites
+### Development environment
 
-- .NET 10.0 SDK
-- Jellyfin 12.2+
+Use `nix develop` with Nix flakes, or run `direnv allow` with direnv. `flake.nix` and `.envrc` provide the development shell; `.envrc` runs `use flake`. Alternatively, use the .NET 10 SDK.
 
-### Building
+The repository pins SDK `10.0.100` in `global.json`, with `rollForward: latestMinor` and `allowPrerelease: false`.
+
+### Build and test
+
+The build script accepts `build`, `test`, `release`, `package`, `clean`, and `help`:
+
+```bash
+./build.sh release
+```
+
+`release` runs a Release build, tests, and packaging. Release builds set `TreatWarningsAsErrors=true` with `NoWarn=CS1591;CS1573` for the main plugin project. The Tests project can emit nullable warnings without failing. Plain .NET commands also work:
 
 ```bash
 dotnet build --configuration Release
 dotnet test
 ```
 
-### Project Structure
+`./build.sh package` produces `dist/media-ccc-de-plugin-<version>.zip`, containing exactly `Jellyfin.Plugin.MediaCccDe.dll` and `meta.json`, both copied to `dist/` first.
 
-```
-├── Api/                    # HTTP client for media.ccc.de API
+CI runs on every push and pull request on `ubuntu-latest`, using `dotnet-version: 10.0.x`, restore, Release build with `--no-restore`, and Release test with `--no-build`.
+
+### Project structure
+
+```text
+├── Api/                    # HTTP client for the media.ccc.de API
 ├── Controllers/            # ASP.NET API controllers
 ├── Models/                 # Data models and DTOs
-├── Pages/                  # Embedded HTML UI pages
-├── Providers/              # Jellyfin metadata providers
-├── Services/               # Business logic services
-├── Configuration/          # Plugin configuration
-├── Plugin.cs               # Plugin entry point
-└── ServiceRegistrator.cs   # DI setup
+├── Pages/                  # Embedded HTML pages and page scripts
+├── Providers/              # Jellyfin metadata, subtitle, and image providers
+├── Services/               # Business logic services and interfaces
+├── Configuration/          # Plugin configuration page HTML
+├── scripts/                # Developer helper scripts
+├── Plugin.cs               # Plugin entry point and dashboard page registration
+├── ServiceRegistrator.cs   # Dependency injection setup
+└── Tests/                  # Unit and integration tests
 ```
 
-### Technology Stack
+Other files at the repository root include `build.sh`, `meta.json`, `flake.nix`, `flake.lock`, `.envrc`, `global.json`, `.github/workflows/ci.yml`, `Jellyfin.Plugin.MediaCccDe.sln`, and `Jellyfin.Plugin.MediaCccDe.csproj`.
 
-- **.NET 10.0** - Target framework (required by Jellyfin 12)
-- **Jellyfin.Controller** - Plugin API
-- **ASP.NET Core** - API controllers
-- **xUnit + Moq** - Testing
-- **System.Text.Json** - Serialization
+### Technology stack
+
+- .NET 10, with `Jellyfin.Controller` and `Jellyfin.Model` 12.2.0.
+- ASP.NET Core controller APIs supplied through Jellyfin plugin dependencies, not a direct package reference.
+- `System.Text.Json` for persistence.
+- xUnit and Moq for tests. `InternalsVisibleTo` is set for `MediaCccDe.Tests`.
 
 ## Limitations
 
-By design, this plugin does NOT include:
-- Video transcoding (uses original files)
-- Custom video player (uses Jellyfin's built-in)
-- Automatic content cleanup
-- Metadata editing UI
-- Download priority queue
-- Bandwidth throttling
-- Per-user quality settings
-- Thumbnail caching
-- Smart recommendations
+- Streaming uses a shared `.strm` per talk, so language preferences for streaming are server-wide rather than per-user.
+- Downloaded watchlist videos are not automatically cleaned up.
+- There is no download-priority queue or bandwidth throttling.
+- Jellyfin 12.2's remote `.strm` subtitle save limitation requires the temporary workaround described above.
+
+## Troubleshooting
+
+Jellyfin writes its server log to its configured log location. If the plugin fails to load, the server log may show `Could not load file or assembly 'MediaBrowser.Controller'` when the server cannot satisfy the plugin's assembly reference. Check that the plugin build targets a compatible Jellyfin API and that `targetAbi` matches its `Jellyfin.Controller` package version.
+
+If automatic `CCC Archive` library creation fails, an error is logged saying `Manual setup may be required`. The Podman smoke test fetches live data from media.ccc.de and therefore needs working internet access.
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT. See [LICENSE](LICENSE).
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Follow TDD: write tests first
-4. Submit a pull request
+Contributions can be submitted as pull requests. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, conventions, and review process.
 
 ## Support
 
-- Issues: [GitHub Issues](https://github.com/ncc1031/jellyfin_ccc-media-de/issues)
-- Discussions: [GitHub Discussions](https://github.com/ncc1031/jellyfin_ccc-media-de/discussions)
+- Issues: [GitHub Issues](https://github.com/Xyz00777/jellyfin_ccc-media-de/issues)
+- Discussions: [GitHub Discussions](https://github.com/Xyz00777/jellyfin_ccc-media-de/discussions)
+- Security reports: see [SECURITY.md](SECURITY.md)
 
 ## Credits
 
-- [media.ccc.de](https://media.ccc.de) for providing the API
-- [Jellyfin](https://jellyfin.org) for the media server platform
+- [media.ccc.de](https://media.ccc.de) for providing the API.
+- [Jellyfin](https://jellyfin.org) for the media server platform.

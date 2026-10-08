@@ -91,9 +91,10 @@ dist/
 .direnv/
 result
 
-## Sisyphus
+## Agent tooling
 .sisyphus/
 .omo/
+.codegraph/
 
 ## macOS
 .DS_Store
