@@ -307,6 +307,102 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
                 await GenerateStrmAsync(conference, evt, conferenceFirstDayStr, cancellationToken).ConfigureAwait(false);
             }
+
+            RemoveMisplacedStrmFiles(conference, events, conferenceFirstDayStr);
+        }
+
+        /// <summary>
+        /// Earlier releases placed talks in folders derived from a broken day number, and
+        /// those files were never removed, so a talk could exist twice under two season
+        /// folders. A misplaced copy is deleted only when the same talk is already present
+        /// at its correct path, which keeps this safe for a conference whose API data is
+        /// only partially available.
+        /// </summary>
+        internal void RemoveMisplacedStrmFiles(Conference conference, IReadOnlyCollection<EventDto> events, string? conferenceFirstDay)
+        {
+            var expectedPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var eventDto in events)
+            {
+                var evt = MapToEvent(eventDto);
+                if (string.IsNullOrWhiteSpace(evt.Slug))
+                {
+                    continue;
+                }
+
+                expectedPaths[evt.Slug] = BuildStrmFilePath(conference, evt, conferenceFirstDay);
+            }
+
+            if (expectedPaths.Count == 0)
+            {
+                return;
+            }
+
+            var conferenceDirectory = Path.Combine(
+                _archivePath,
+                StrmHelper.NormalizeConferenceDirectory(conference.Acronym));
+
+            if (!Directory.Exists(conferenceDirectory))
+            {
+                return;
+            }
+
+            foreach (var file in Directory.EnumerateFiles(conferenceDirectory, "*.strm", SearchOption.AllDirectories))
+            {
+                var slug = Path.GetFileNameWithoutExtension(file);
+                if (!expectedPaths.TryGetValue(slug, out var expectedPath))
+                {
+                    continue;
+                }
+
+                if (!string.Equals(
+                        Path.GetFullPath(file),
+                        Path.GetFullPath(expectedPath),
+                        StringComparison.Ordinal))
+                {
+                    TryDeleteFile(file);
+                }
+            }
+
+            RemoveEmptyDirectories(conferenceDirectory);
+        }
+
+        private static void TryDeleteFile(string path)
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        private static void RemoveEmptyDirectories(string root)
+        {
+            var directories = Directory.GetDirectories(root, "Season *", SearchOption.AllDirectories)
+                .OrderByDescending(d => d.Length)
+                .ToList();
+
+            foreach (var directory in directories)
+            {
+                if (!Directory.EnumerateFileSystemEntries(directory).Any())
+                {
+                    try
+                    {
+                        Directory.Delete(directory);
+                    }
+                    catch (IOException)
+                    {
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                    }
+                }
+            }
         }
 
         public bool StrmFilesExistForConference(ConferenceDto conferenceDto)

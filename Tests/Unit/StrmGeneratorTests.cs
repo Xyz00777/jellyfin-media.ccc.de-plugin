@@ -699,5 +699,106 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         #endregion
+
+        #region Misplaced strm cleanup
+
+        private void WriteStrm(string relativePath, string content = "https://cdn.media.ccc.de/talk.mp4")
+        {
+            var full = Path.Combine(_testArchivePath, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllText(full, content);
+        }
+
+        private static ConferenceDto ConferenceFor(string acronym)
+        {
+            return new ConferenceDto { Acronym = acronym, Title = acronym.ToUpperInvariant() };
+        }
+
+        private static EventDto TalkOn(string day, string slug)
+        {
+            return new EventDto
+            {
+                Guid = "guid-" + slug,
+                Slug = slug,
+                Title = slug,
+                Date = day + "T10:00:00+01:00"
+            };
+        }
+
+        [Fact]
+        public void RemoveMisplacedStrmFiles_deletes_a_duplicate_left_in_a_wrong_season_folder()
+        {
+            // camp2023 style: the same talk present under the old broken season number.
+            WriteStrm("37c3/Season 01/talk-a.strm");
+            WriteStrm("37c3/Season 69/talk-a.strm");
+
+            var events = new[] { TalkOn("2023-08-12", "talk-a") };
+            var conference = new Conference { Acronym = "37c3", Title = "37C3" };
+
+            _strmGenerator.RemoveMisplacedStrmFiles(conference, events, "2023-08-12");
+
+            Assert.True(File.Exists(Path.Combine(_testArchivePath, "37c3", "Season 01", "talk-a.strm")));
+            Assert.False(File.Exists(Path.Combine(_testArchivePath, "37c3", "Season 69", "talk-a.strm")));
+        }
+
+        [Fact]
+        public void RemoveMisplacedStrmFiles_removes_the_emptied_season_folder()
+        {
+            WriteStrm("37c3/Season 01/talk-a.strm");
+            WriteStrm("37c3/Season 76/talk-a.strm");
+
+            var events = new[] { TalkOn("2023-08-12", "talk-a") };
+            var conference = new Conference { Acronym = "37c3", Title = "37C3" };
+
+            _strmGenerator.RemoveMisplacedStrmFiles(conference, events, "2023-08-12");
+
+            Assert.False(Directory.Exists(Path.Combine(_testArchivePath, "37c3", "Season 76")));
+            Assert.True(Directory.Exists(Path.Combine(_testArchivePath, "37c3", "Season 01")));
+        }
+
+        [Fact]
+        public void RemoveMisplacedStrmFiles_keeps_a_talk_that_is_not_in_the_current_event_list()
+        {
+            // Guards the destructive path: a file the API did not report this run must
+            // survive, otherwise a partial API response would delete real library entries.
+            WriteStrm("37c3/Season 01/talk-a.strm");
+            WriteStrm("37c3/Season 01/not-reported-anymore.strm");
+
+            var events = new[] { TalkOn("2023-08-12", "talk-a") };
+            var conference = new Conference { Acronym = "37c3", Title = "37C3" };
+
+            _strmGenerator.RemoveMisplacedStrmFiles(conference, events, "2023-08-12");
+
+            Assert.True(File.Exists(Path.Combine(_testArchivePath, "37c3", "Season 01", "not-reported-anymore.strm")));
+            Assert.True(File.Exists(Path.Combine(_testArchivePath, "37c3", "Season 01", "talk-a.strm")));
+        }
+
+        [Fact]
+        public void RemoveMisplacedStrmFiles_is_a_no_op_for_an_unknown_conference()
+        {
+            _strmGenerator.RemoveMisplacedStrmFiles(
+                new Conference { Acronym = "nope", Title = "Nope" },
+                new[] { TalkOn("2023-08-12", "talk-a") },
+                "2023-08-12");
+
+            Assert.False(Directory.Exists(Path.Combine(_testArchivePath, "nope")));
+        }
+
+        [Fact]
+        public void RemoveMisplacedStrmFiles_moves_a_talk_whose_season_changed()
+        {
+            // A talk re-dated into a different day ends up in a new season folder while the
+            // old copy remains; only the stale one may go.
+            WriteStrm("37c3/Season 01/talk-a.strm");
+
+            var events = new[] { TalkOn("2023-08-14", "talk-a") };
+            var conference = new Conference { Acronym = "37c3", Title = "37C3" };
+
+            _strmGenerator.RemoveMisplacedStrmFiles(conference, events, "2023-08-12");
+
+            Assert.False(File.Exists(Path.Combine(_testArchivePath, "37c3", "Season 01", "talk-a.strm")));
+        }
+
+        #endregion
     }
 }
