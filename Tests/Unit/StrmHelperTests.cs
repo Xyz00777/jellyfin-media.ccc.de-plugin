@@ -177,5 +177,97 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         #endregion
+
+        #region ResolveConferenceFirstDay
+
+        [Fact]
+        public void ResolveConferenceFirstDay_uses_the_earliest_day_for_a_clean_conference()
+        {
+            var dates = new[]
+            {
+                "2023-12-28T19:00:00+01:00",
+                "2023-12-27T10:30:00+01:00",
+                "2023-12-29T11:00:00+01:00"
+            };
+
+            Assert.Equal("2023-12-27", StrmHelper.ResolveConferenceFirstDay(dates));
+        }
+
+        [Fact]
+        public void ResolveConferenceFirstDay_ignores_a_placeholder_date_before_the_conference()
+        {
+            // Real shape of CCC Camp 2023: the camp ran 12-19 Aug 2023, but the API also
+            // carries one talk dated 5 Jun 2023. Anchoring on the minimum date turned
+            // every real day into seasons 69-76.
+            var dates = new List<string> { "2023-06-05T10:00:00+02:00" };
+            foreach (var day in Enumerable.Range(12, 8))
+            {
+                dates.Add($"2023-08-{day:D2}T10:00:00+02:00");
+            }
+
+            Assert.Equal("2023-08-12", StrmHelper.ResolveConferenceFirstDay(dates));
+        }
+
+        [Fact]
+        public void ResolveConferenceFirstDay_tolerates_a_rest_day_inside_the_run()
+        {
+            var dates = new[]
+            {
+                "2023-08-16T10:00:00+02:00",
+                "2023-08-17T10:00:00+02:00",
+                // 18 Aug has no talks at all.
+                "2023-08-19T10:00:00+02:00"
+            };
+
+            Assert.Equal("2023-08-16", StrmHelper.ResolveConferenceFirstDay(dates));
+        }
+
+        [Fact]
+        public void ResolveConferenceFirstDay_picks_the_busiest_run_not_the_longest()
+        {
+            var dates = new List<string>
+            {
+                // A long but nearly empty run of single placeholder talks.
+                "2004-01-01T01:00:00+01:00",
+                "2004-01-02T01:00:00+01:00",
+                "2004-01-03T01:00:00+01:00",
+                // The real congress: three days, many talks each.
+                "2023-12-27T10:00:00+01:00",
+                "2023-12-27T12:00:00+01:00",
+                "2023-12-27T14:00:00+01:00",
+                "2023-12-28T10:00:00+01:00",
+                "2023-12-28T12:00:00+01:00",
+                "2023-12-28T14:00:00+01:00"
+            };
+
+            Assert.Equal("2023-12-27", StrmHelper.ResolveConferenceFirstDay(dates));
+        }
+
+        [Fact]
+        public void ResolveConferenceFirstDay_returns_null_without_usable_dates()
+        {
+            Assert.Null(StrmHelper.ResolveConferenceFirstDay(Array.Empty<string>()));
+            Assert.Null(StrmHelper.ResolveConferenceFirstDay(new string?[] { null, "", "not-a-date" }));
+        }
+
+        [Fact]
+        public void ResolveConferenceFirstDay_with_the_camp_anchor_maps_days_to_sane_seasons()
+        {
+            var firstDay = StrmHelper.ResolveConferenceFirstDay(new[]
+            {
+                "2023-06-05T10:00:00+02:00",
+                "2023-08-12T10:00:00+02:00",
+                "2023-08-14T10:00:00+02:00",
+                "2023-08-15T10:00:00+02:00",
+                "2023-08-19T10:00:00+02:00"
+            });
+
+            Assert.Equal(1, StrmHelper.ExtractDayNumber("2023-08-12T10:00:00+02:00", firstDay));
+            Assert.Equal(3, StrmHelper.ExtractDayNumber("2023-08-14T10:00:00+02:00", firstDay));
+            Assert.Equal(4, StrmHelper.ExtractDayNumber("2023-08-15T10:00:00+02:00", firstDay));
+            Assert.Equal(8, StrmHelper.ExtractDayNumber("2023-08-19T10:00:00+02:00", firstDay));
+        }
+
+        #endregion
     }
 }

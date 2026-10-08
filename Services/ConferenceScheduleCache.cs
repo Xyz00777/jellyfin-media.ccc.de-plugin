@@ -102,8 +102,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 return new ConferenceSchedule { LogoUrl = conference.LogoUrl, BySlug = bySlug, ByGuid = byGuid };
             }
 
-            var firstDay = events.Min(e => TryParseInstant(e.Date, out var d) ? d.Date : DateTime.MinValue).Date;
-            var firstDayString = firstDay.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var firstDayString = StrmHelper.ResolveConferenceFirstDay(events.Select(e => e.Date)) ?? string.Empty;
 
             var byDay = events
                 .GroupBy(e => (TryParseInstant(e.Date, out var parsed) ? parsed.Date : DateTime.MinValue))

@@ -192,15 +192,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                     continue;
                 }
 
-                var conferenceFirstDay = events
-                    .Where(e => !string.IsNullOrEmpty(e.Date) && DateTime.TryParse(e.Date, out _))
-                    .Select(e => DateTime.Parse(e.Date!))
-                    .OrderBy(d => d)
-                    .FirstOrDefault();
-
-                var conferenceFirstDayStr = conferenceFirstDay != default
-                    ? conferenceFirstDay.ToString("yyyy-MM-dd")
-                    : null;
+                var conferenceFirstDayStr = StrmHelper.ResolveConferenceFirstDay(events.Select(e => e.Date));
 
                 foreach (var eventDto in events)
                 {
@@ -304,15 +296,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 return;
             }
 
-            var conferenceFirstDay = events
-                .Where(e => !string.IsNullOrEmpty(e.Date) && DateTime.TryParse(e.Date, out _))
-                .Select(e => DateTime.Parse(e.Date!))
-                .OrderBy(d => d)
-                .FirstOrDefault();
-
-            var conferenceFirstDayStr = conferenceFirstDay != default
-                ? conferenceFirstDay.ToString("yyyy-MM-dd")
-                : null;
+            var conferenceFirstDayStr = StrmHelper.ResolveConferenceFirstDay(events.Select(e => e.Date));
 
             foreach (var eventDto in events)
             {
