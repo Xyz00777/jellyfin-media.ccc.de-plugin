@@ -10,6 +10,35 @@ Run `dotnet build --configuration Release` and `dotnet test`. You can also use `
 
 CI runs on every push and pull request on `ubuntu-latest`: restore, Release build with `--no-restore`, then Release test with `--no-build`. Make sure your change passes locally before opening a pull request. Release builds treat warnings as errors for the main plugin project, except `CS1591` and `CS1573` via `NoWarn`. The test project currently emits nullable warnings without failing.
 
+## Releasing
+
+To cut a release, bump `<Version>` in `Jellyfin.Plugin.MediaCccDe.csproj` and `"version"` in `meta.json` (the csproj uses three parts, such as `1.1.0`, while the manifest uses four, such as `1.1.0.0`). Update `"changelog"` in `meta.json` to describe the change. If the `Jellyfin.Controller` / `Jellyfin.Model` package versions change, update `"targetAbi"` in `meta.json` to match the `Jellyfin.Controller` version; a lower `targetAbi` can make Jellyfin accept the plugin and then disable it at load time.
+
+Commit the changes, then create and push a matching annotated tag:
+
+```bash
+git tag -a v<version> -m "Release <version>"
+git push origin v<version>
+```
+
+Pushing the tag triggers `.github/workflows/release.yml`, which validates the tag and manifest/project versions, runs the build and tests, refreshes the manifest timestamp, packages `dist/media-ccc-de-plugin-<version>.zip` with exactly `Jellyfin.Plugin.MediaCccDe.dll` and `meta.json`, and publishes it as a GitHub Release. The workflow deliberately fails if the tag, csproj version, and manifest version disagree; fix the files rather than bypassing the check. It skips publishing if a GitHub Release for that tag already exists. The workflow rewrites `meta.json`'s `timestamp` inside the published artifact, so the timestamp in git and the timestamp in the shipped ZIP are not expected to match.
+
+## Version consistency
+
+`scripts/check-version.sh` is the single source of truth for version checks. It runs in three places:
+
+- **pre-commit** — via `.pre-commit-config.yaml`
+- **CI** — as the first step of `.github/workflows/ci.yml`
+- **releases** — `.github/workflows/release.yml`, with `EXPECTED_VERSION` pinned to the tag
+
+It verifies that `meta.json`'s `version` matches the `.csproj` `<Version>` (allowing one trailing `.0`, since the manifest uses Jellyfin's four-part format) and that `targetAbi` matches the `Jellyfin.Controller` package version. Run it by hand any time with:
+
+```bash
+bash scripts/check-version.sh
+```
+
+The hook is a local pre-commit hook, so it needs no network access. Install the `pre-commit` tool and the hook activates automatically. Contributors who install `pre-commit` from https://pre-commit.com get it with no extra setup; everyone else can just run the script before committing.
+
 ## Project layout
 
 - `Api/`: media.ccc.de HTTP client

@@ -25,7 +25,7 @@ The plugin project references `Jellyfin.Controller` and `Jellyfin.Model` 12.2.0,
 
 ## Installation
 
-No GitHub release artifacts are published yet. Build from source, then copy the plugin files into Jellyfin's versioned plugin directory.
+No GitHub Releases have been published yet. Once a release is published, its asset is a ZIP named `media-ccc-de-plugin-<version>.zip`. To install it, unpack it into Jellyfin's versioned plugin directory and restart Jellyfin, as described below. Jellyfin's **Dashboard > Plugins > Repositories > Add** page expects the URL of a plugin-repository `manifest.json`, not a ZIP, so it is not used for GitHub Release assets. Until a release is available, or to build for Jellyfin 10.11 or a different Jellyfin API version, build from source:
 
 Clone the repository and build the package:
 

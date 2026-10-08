@@ -1,0 +1,112 @@
+name: Publish release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out full history for release metadata
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore solution dependencies
+        run: |
+          set -euo pipefail
+          dotnet restore Jellyfin.Plugin.MediaCccDe.sln
+        shell: bash
+
+      - name: Build solution in Release configuration
+        run: |
+          set -euo pipefail
+          dotnet build Jellyfin.Plugin.MediaCccDe.sln --configuration Release --no-restore
+        shell: bash
+
+      - name: Test solution in Release configuration
+        run: |
+          set -euo pipefail
+          dotnet test Jellyfin.Plugin.MediaCccDe.sln --configuration Release --no-build
+        shell: bash
+
+      - name: Validate tag, plugin versions, and Jellyfin ABI
+        run: |
+          set -euo pipefail
+          # Single source of truth, shared with the pre-commit hook and CI.
+          # EXPECTED_VERSION pins the check to the tag being released.
+          EXPECTED_VERSION="${GITHUB_REF_NAME#v}" bash scripts/check-version.sh
+          VERSION="$(sed -nE 's/^[[:space:]]*<Version>([^<]+)<\/Version>.*/\1/p' Jellyfin.Plugin.MediaCccDe.csproj | head -n1)"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "CONTROLLER_VERSION=$(jq -r '.targetAbi' meta.json)" >> "$GITHUB_ENV"
+        shell: bash
+
+      - name: Refresh manifest timestamp without moving it backwards
+        run: |
+          set -euo pipefail
+          PREVIOUS_TIMESTAMP="$(jq -r '.timestamp' meta.json)"
+          CURRENT_TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%S.%N' | sed -E 's/([0-9]{7})[0-9]{2}$/\1/')Z"
+          if [[ "$CURRENT_TIMESTAMP" < "$PREVIOUS_TIMESTAMP" ]]; then
+            CURRENT_TIMESTAMP="$PREVIOUS_TIMESTAMP"
+          fi
+          TEMP_META="$(mktemp)"
+          jq --arg timestamp "$CURRENT_TIMESTAMP" '.timestamp = $timestamp' meta.json > "$TEMP_META"
+          mv "$TEMP_META" meta.json
+          jq -e --arg timestamp "$CURRENT_TIMESTAMP" '.timestamp == $timestamp' meta.json >/dev/null
+          git diff -- meta.json
+        shell: bash
+
+      - name: Package and verify flat plugin ZIP
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp bin/Release/net10.0/Jellyfin.Plugin.MediaCccDe.dll dist/Jellyfin.Plugin.MediaCccDe.dll
+          cp meta.json dist/meta.json
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZIP_DEFLATED, ZipFile
+
+          archive = Path("dist") / f"media-ccc-de-plugin-${{ env.VERSION }}.zip"
+          entries = [
+              Path("dist/Jellyfin.Plugin.MediaCccDe.dll"),
+              Path("dist/meta.json"),
+          ]
+          with ZipFile(archive, "w", compression=ZIP_DEFLATED) as package:
+              for entry in entries:
+                  package.write(entry, arcname=entry.name)
+
+          with ZipFile(archive) as package:
+              names = package.namelist()
+              expected = {"Jellyfin.Plugin.MediaCccDe.dll", "meta.json"}
+              if len(names) != 2 or set(names) != expected:
+                  raise SystemExit(f"Unexpected ZIP contents: {names!r}")
+              print(f"Verified {archive}: {', '.join(names)}")
+          PY
+        shell: bash
+
+      - name: Publish GitHub Release with generated notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "GitHub Release for '$GITHUB_REF_NAME' already exists; skipping publish."
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" "dist/media-ccc-de-plugin-${VERSION}.zip" \
+            --title "Media.CCC.de v${VERSION} (Jellyfin ${CONTROLLER_VERSION}+)" \
+            --generate-notes
+        shell: bash
