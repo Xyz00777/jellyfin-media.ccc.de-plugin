@@ -74,5 +74,66 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             
             // Assert - no exception thrown
         }
+
+        [Fact]
+        public void FindExistingLibrary_matches_a_library_that_serves_the_archive_under_another_name()
+        {
+            // A library already pointing at the archive must be reused, otherwise a second
+            // one gets created and Jellyfin renames it to "CCC Archive2".
+            _libraryManagerMock.Setup(x => x.GetVirtualFolders()).Returns(new List<VirtualFolderInfo>
+            {
+                new VirtualFolderInfo { Name = "CCC Archive2", Locations = new[] { "/config/plugins/configurations/archive" } }
+            });
+
+            var found = NewService().FindExistingLibrary("/config/plugins/configurations/archive");
+
+            Assert.NotNull(found);
+            Assert.Equal("CCC Archive2", found!.Name);
+        }
+
+        [Fact]
+        public void FindExistingLibrary_matches_on_name_even_with_a_different_path()
+        {
+            _libraryManagerMock.Setup(x => x.GetVirtualFolders()).Returns(new List<VirtualFolderInfo>
+            {
+                new VirtualFolderInfo { Name = "CCC Archive", Locations = new[] { "/somewhere/else" } }
+            });
+
+            Assert.NotNull(NewService().FindExistingLibrary("/config/plugins/configurations/archive"));
+        }
+
+        [Fact]
+        public void FindExistingLibrary_ignores_an_unrelated_library()
+        {
+            _libraryManagerMock.Setup(x => x.GetVirtualFolders()).Returns(new List<VirtualFolderInfo>
+            {
+                new VirtualFolderInfo { Name = "Films", Locations = new[] { "/media/movies" } }
+            });
+
+            Assert.Null(NewService().FindExistingLibrary("/config/plugins/configurations/archive"));
+        }
+
+        [Fact]
+        public void FindExistingLibrary_tolerates_a_trailing_separator_and_a_folder_without_locations()
+        {
+            _libraryManagerMock.Setup(x => x.GetVirtualFolders()).Returns(new List<VirtualFolderInfo>
+            {
+                new VirtualFolderInfo { Name = "Empty", Locations = null },
+                new VirtualFolderInfo { Name = "Trailing", Locations = new[] { "/config/plugins/configurations/archive/" } }
+            });
+
+            var found = NewService().FindExistingLibrary("/config/plugins/configurations/archive");
+
+            Assert.NotNull(found);
+            Assert.Equal("Trailing", found!.Name);
+        }
+
+        private LibrarySetupService NewService()
+        {
+            return new LibrarySetupService(
+                _libraryManagerMock.Object,
+                _applicationPathsMock.Object,
+                _loggerMock.Object);
+        }
     }
 }

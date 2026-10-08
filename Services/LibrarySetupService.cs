@@ -22,6 +22,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         private const string ArchiveLibraryName = "CCC Archive";
         private const string ArchiveFolderName = "archive";
 
+        // The creation check and the creation itself must not interleave. A restart while
+        // the library was still being added, or two starts racing, both saw "missing" and
+        // produced a duplicate library that Jellyfin then renamed.
+        private static readonly SemaphoreSlim CreationGate = new(1, 1);
+
         private readonly ILibraryManager _libraryManager;
         private readonly IApplicationPaths _applicationPaths;
         private readonly ILogger<LibrarySetupService> _logger;
@@ -49,36 +54,32 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
         /// <returns>A task representing the asynchronous operation.</returns>
         public async Task StartAsync(CancellationToken cancellationToken)
         {
+            await CreationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                // Check if library already exists (idempotency check)
-                var existingLibrary = _libraryManager.GetVirtualFolders()
-                    .FirstOrDefault(vf => string.Equals(vf.Name, ArchiveLibraryName, StringComparison.Ordinal));
+                // Create the archive directory first: a library pointing at a path that does
+                // not exist yet is what produced an empty library on a fresh install.
+                var archivePath = Path.Combine(_applicationPaths.PluginConfigurationsPath, ArchiveFolderName);
+                Directory.CreateDirectory(archivePath);
 
-                if (existingLibrary != null)
+                if (FindExistingLibrary(archivePath) != null)
                 {
                     _logger.LogInformation("[MediaCcc] Library '{LibraryName}' already exists, skipping creation", ArchiveLibraryName);
                     return;
                 }
 
-                // Create the archive directory path
-                var archivePath = Path.Combine(_applicationPaths.PluginConfigurationsPath, ArchiveFolderName);
-
-                // Ensure directory exists
-                Directory.CreateDirectory(archivePath);
-
-                // Create the library with TvShows content type
-                // Path is set via LibraryOptions.PathInfos
                 var libraryOptions = new LibraryOptions
                 {
                     PathInfos = new[] { new MediaPathInfo { Path = archivePath } }
                 };
 
+                // The sync queues its own scan once it has written files, so refreshing here
+                // only scans an empty directory and delays startup.
                 await _libraryManager.AddVirtualFolder(
                     ArchiveLibraryName,
                     CollectionTypeOptions.tvshows,
                     libraryOptions,
-                    refreshLibrary: true
+                    refreshLibrary: false
                 ).ConfigureAwait(false);
 
                 _logger.LogInformation("[MediaCcc] Created library '{LibraryName}' at path '{Path}'", ArchiveLibraryName, archivePath);
@@ -88,6 +89,41 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 // Log error but don't fail startup - the plugin should still work without the library
                 _logger.LogError(ex, "[MediaCcc] Failed to create library '{LibraryName}'. Manual setup may be required.", ArchiveLibraryName);
             }
+            finally
+            {
+                CreationGate.Release();
+            }
+        }
+
+        /// <summary>
+        /// Matches on the archive path as well as the name, so a library that already serves
+        /// the archive under a different name is reused instead of duplicated.
+        /// </summary>
+        internal VirtualFolderInfo? FindExistingLibrary(string archivePath)
+        {
+            var normalised = Path.GetFullPath(archivePath).TrimEnd(Path.DirectorySeparatorChar);
+
+            foreach (var folder in _libraryManager.GetVirtualFolders())
+            {
+                if (string.Equals(folder.Name, ArchiveLibraryName, StringComparison.Ordinal))
+                {
+                    return folder;
+                }
+
+                var servesArchive = (folder.Locations ?? new string[0])
+                    .Where(location => !string.IsNullOrWhiteSpace(location))
+                    .Any(location => string.Equals(
+                        Path.GetFullPath(location).TrimEnd(Path.DirectorySeparatorChar),
+                        normalised,
+                        StringComparison.Ordinal));
+
+                if (servesArchive)
+                {
+                    return folder;
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
