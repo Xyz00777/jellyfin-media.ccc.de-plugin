@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>Jellyfin.Plugin.MediaCccDe</RootNamespace>
     <AssemblyName>Jellyfin.Plugin.MediaCccDe</AssemblyName>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 

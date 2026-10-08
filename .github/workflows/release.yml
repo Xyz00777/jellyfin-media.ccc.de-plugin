@@ -107,8 +107,9 @@ jobs:
           # SHA-256 hex is a best-effort checksum format assumption; the server model allows
           # checksum to be nullable, so an unsupported value is plausibly tolerated as absent.
           bash scripts/generate-manifest.sh "$VERSION" "$ASSET_URL" "$ZIP_PATH"
-          # A tag-pinned raw manifest is reproducible and stable, but lists only this release.
-          echo "manifest_url: https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/manifest.json" >> "$GITHUB_STEP_SUMMARY"
+          # The URL a user pastes into Dashboard > Plugins > Repositories. A
+          # raw.githubusercontent tag URL 404s: the manifest is a release asset, not committed.
+          echo "manifest_url: https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/manifest.json" >> "$GITHUB_STEP_SUMMARY"
         shell: bash
 
       - name: Publish GitHub Release with generated notes
