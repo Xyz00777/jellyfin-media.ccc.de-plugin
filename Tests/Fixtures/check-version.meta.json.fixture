@@ -1,0 +1,5 @@
+{
+  "version": "__VERSION__",
+  "targetAbi": "12.2.0.0",
+  "changelog": "fixture"
+}

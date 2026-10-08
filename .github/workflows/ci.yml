@@ -11,8 +11,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The release guard compares the project version against existing tags, and a
+          # default shallow checkout fetches none of them. Without the full history the
+          # guard would pass on every run and silently protect nothing.
+          fetch-depth: 0
       - name: Check plugin and Jellyfin versions
+        env:
+          # A pull_request checkout lands on a synthetic merge commit, so the release
+          # guard reads the branch tip the pull request actually proposes.
+          RELEASE_GUARD_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash scripts/check-version.sh
+      - name: Test the release guard
+        run: bash scripts/test-check-version.sh
       - name: Check whitespace and final newlines
         run: sh scripts/check-whitespace.sh
       - uses: actions/setup-dotnet@v4
