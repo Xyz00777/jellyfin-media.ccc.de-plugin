@@ -85,10 +85,22 @@ The plugin's configuration page is registered as `MediaCCCDe` and is not in the 
 Open the standalone settings page:
 
 ```text
-http://<your-jellyfin>/media_ccc/settings
+https://<your-jellyfin>/media_ccc/settings
 ```
 
-When the plugin starts, the server log prints a line containing a settings URL and the runtime-generated access token. The token is also persisted at `{PluginConfigurationsPath}/settings-access.txt`. Treat it as a secret because it grants access to plugin settings. Paste the token value into the unlock form field and submit; the settings page does not read a `token` query parameter. After a successful unlock, a signed cookie lasts 30 days. Its HMAC key is derived at runtime from the token using SHA-256; no signing secret is committed to the repository.
+Use `https://` unless the page is opened on the server itself. The access token is a reusable secret for plugin settings, so the unlock form only accepts it over HTTPS; a request from another machine over plain HTTP is rejected with `426 Upgrade Required`. Requests that arrive over loopback are exempt, because a local install has no network path to observe and Jellyfin's default is plain HTTP locally.
+
+To obtain the token, read it from the server's filesystem:
+
+```text
+{PluginConfigurationsPath}/settings-access.txt
+```
+
+The plugin creates this file on first start and points at it in the server log. **The token is never written to the log**, because logs are routinely exported, attached to support requests, and archived. On Linux and macOS the file is created readable only by the account running Jellyfin. To rotate the token, delete that file and restart Jellyfin; every plugin session cookie is invalidated.
+
+Paste the token value into the unlock form field and submit; the settings page does not read a `token` query parameter. After a successful unlock, a signed cookie lasts 30 days. It is always issued with the `Secure`, `HttpOnly`, and `SameSite=Strict` attributes. Its HMAC key is derived at runtime from the token using SHA-256; no signing secret is committed to the repository.
+
+If Jellyfin runs behind a reverse proxy, configure the proxy's forwarded-protocol headers so the plugin sees the original scheme. Otherwise a request forwarded as plain HTTP is refused even when the client used HTTPS.
 
 ### Subtitles
 
@@ -109,10 +121,10 @@ The optional `DownloadSubtitles` setting is a separate bulk pre-fetch path for s
 Open the standalone page:
 
 ```text
-http://<your-jellyfin>/media_ccc/settings/languages
+https://<your-jellyfin>/media_ccc/settings/languages
 ```
 
-On the first visit, provide your own Jellyfin API key from Dashboard > Advanced > API Keys. It is posted to `/media_ccc/settings/languages/identify`, verified against the server to identify the account, then discarded. The key is never stored or logged. A signed cookie remembers the identified user for 90 days.
+On the first visit, provide your own Jellyfin username and password. They are posted to `/media_ccc/settings/languages/identify`, checked against the server to identify the account, then discarded; neither is stored or logged, and the identity comes from Jellyfin's response rather than the form. Because the password grants your account's Jellyfin access, the form only accepts it over HTTPS unless the request arrives over loopback. A signed cookie remembers the identified user for 90 days; disabling or deleting your Jellyfin account invalidates that session immediately, because the plugin re-checks the account on every request.
 
 These preferences apply to watchlist downloads. Streaming uses one shared `.strm` per talk and cannot vary by user; the server-wide `PreferredAudioLanguages` setting determines what that `.strm` points to. The preferences are also available through `GET` and `POST` at `/media_ccc/languages/audio` and `/media_ccc/languages/subtitles`. The dashboard's `Language Preferences` menu link opens this standalone page rather than providing a working dashboard form.
 
@@ -121,7 +133,7 @@ These preferences apply to watchlist downloads. Streaming uses one shared `.strm
 The plugin's own web interface ships in **English and German**. The language is chosen per request from the `Accept-Language` header your browser sends, falling back to English. Every plugin page has a language switcher in the top-right corner, and you can force a language with a `?lang=en` or `?lang=de` query parameter, for example:
 
 ```text
-http://<your-jellyfin>/media_ccc/browse?lang=de
+https://<your-jellyfin>/media_ccc/browse?lang=de
 ```
 
 This is separate from the audio and subtitle language preferences below, which choose the *media* language rather than the interface language.
@@ -132,19 +144,34 @@ The server menu includes links to **Browse**, **CCC Watchlist**, and **Language 
 
 | Page | URL |
 |------|-----|
-| Browse conferences | `http://<your-jellyfin>/media_ccc/browse` |
-| Watchlist | `http://<your-jellyfin>/media_ccc/watchlist/page` |
-| Sync log | `http://<your-jellyfin>/media_ccc/sync/log` |
-| Settings | `http://<your-jellyfin>/media_ccc/settings` |
-| Language preferences | `http://<your-jellyfin>/media_ccc/settings/languages` |
+| Browse conferences | `https://<your-jellyfin>/media_ccc/browse` |
+| Watchlist | `https://<your-jellyfin>/media_ccc/watchlist/page` |
+| Sync log | `https://<your-jellyfin>/media_ccc/sync/log` |
+| Settings | `https://<your-jellyfin>/media_ccc/settings` |
+| Language preferences | `https://<your-jellyfin>/media_ccc/settings/languages` |
 
-Browse and the watchlist identify you once with your own Jellyfin API key and then remember you with a signed cookie, the same handshake the language preferences page uses. Sync log history is readable by anyone who can reach the server URL; the sync *actions* still require an elevated user.
+Browse and the watchlist identify you once with your own Jellyfin login and then remember you with a signed cookie, the same handshake the language preferences page uses. Sync log history is readable by anyone who can reach the server URL; the sync *actions* still require an elevated user.
 
 `CCC Archive` is a TV library backed by `{PluginConfigurationsPath}/archive`. Per-user watchlist libraries are created for sanitized usernames. During synchronization, stale archive `.strm` files that no longer correspond to anything in the current API response are removed. Downloaded watchlist videos are not automatically cleaned up.
 
 ### Where downloads land
 
-By default, watchlist downloads go under `{PluginConfigurationsPath}/ccc-media/watchlists/<username>/`. Files are flat in the user's library root, named `<talk-slug>-<event-guid>.<format>`. If a recording has no format, the extension falls back to `mp4`.
+By default, watchlist downloads go under `{PluginConfigurationsPath}/ccc-media/watchlists/<username>/`. Files are flat in the user's library root, named `<talk-slug>-<event-guid>.<format>`.
+
+### Download limits
+
+Any authenticated user can queue a download for any recording in the catalog, so the plugin bounds how much storage the queue can consume. These limits are fixed constants in `Services/DownloadLimits.cs`:
+
+| Limit | Value |
+|-------|-------|
+| Unfinished downloads per user | 250 |
+| Unfinished downloads across all users | 500 |
+| Finished queue items retained | 500 |
+| Size of a single recording | 32 GiB |
+| Size of one user's watchlist library | 100 GiB |
+| Free space kept in reserve on the download volume | 512 MiB |
+
+A recording is checked against these limits twice: once when it is queued, and again while it transfers, so a false or missing `Content-Length` cannot get around them. When a limit is reached the request is refused with a `DownloadQuotaExceededException`, which the API reports as `429` and the pages render as a message. Free space that the platform cannot report is treated as unconstrained; the per-user byte quota still applies. If a recording has no format, the extension falls back to `mp4`.
 
 ## Architecture
 
@@ -204,9 +231,9 @@ The `/media_ccc` routes require an authenticated user. The `/media_ccc/sync` rou
 | POST | `/media_ccc/settings` | Settings access token | Save plugin settings. |
 | POST | `/media_ccc/settings/unlock` | Settings access token | Unlock settings using the form token. |
 | GET | `/media_ccc/settings/download` | Settings access token | Download settings. |
-| GET | `/media_ccc/settings/languages` | User API-key handshake | Get the language preferences page. |
-| POST | `/media_ccc/settings/languages` | User API-key handshake | Save per-user language preferences. |
-| GET | `/media_ccc/settings/languages/identify` | User API-key handshake | Identify the user using their Jellyfin API key. |
+| GET | `/media_ccc/settings/languages` | Jellyfin login | Get the language preferences page. |
+| POST | `/media_ccc/settings/languages` | Jellyfin login | Save per-user language preferences. |
+| GET | `/media_ccc/settings/languages/identify` | Jellyfin login | Identify the user using their Jellyfin login. |
 
 ### Plugin-served HTML pages
 
@@ -217,12 +244,12 @@ These render the web interface. They are the paths the dashboard menu entries fo
 | GET | `/media_ccc/browse` | Any | Browse conferences. Accepts `q`, `year`, `conference`. |
 | POST | `/media_ccc/browse/events` | Any | Select a conference and list its events. |
 | POST | `/media_ccc/browse/add` | Identified user | Add a talk to the watchlist and queue its download. |
-| POST | `/media_ccc/browse/identify` | Any | Identify the user with a Jellyfin API key. |
+| POST | `/media_ccc/browse/identify` | Any | Identify the user with a Jellyfin login. |
 | GET | `/media_ccc/watchlist/page` | Any | Show the watchlist and download queue. |
 | POST | `/media_ccc/watchlist/page/start` | Identified user | Queue downloads for the watchlist. |
 | POST | `/media_ccc/watchlist/page/remove` | Identified user | Remove one item. Posts `eventGuid`. |
 | POST | `/media_ccc/watchlist/page/retry` | Identified user | Retry a failed item. Posts `eventGuid`. |
-| POST | `/media_ccc/watchlist/page/identify` | Any | Identify the user with a Jellyfin API key. |
+| POST | `/media_ccc/watchlist/page/identify` | Any | Identify the user with a Jellyfin login. |
 | GET | `/media_ccc/sync/log` | Any | Show the synchronization history. |
 | GET | `/media_ccc/sync/history/confirm` | Any | Confirmation step before clearing the history. |
 | POST | `/media_ccc/sync/history/confirm` | Elevated user | Clear the synchronization history. |
