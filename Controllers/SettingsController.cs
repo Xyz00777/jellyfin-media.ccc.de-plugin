@@ -56,6 +56,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         {
             var language = PluginLanguage.Resolve(Request);
             var translations = Translations.For(language);
+
+            if (!CredentialTransportGuard.AllowsCredentialSubmission(Request))
+            {
+                return StatusCode(StatusCodes.Status426UpgradeRequired, translations["settings.error.httpsRequired"]);
+            }
+
             var token = await _tokenStore.GetAsync(cancellationToken).ConfigureAwait(false);
             var candidate = Request.Form["token"].ToString();
 
@@ -74,7 +80,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
                 {
                     HttpOnly = true,
                     SameSite = SameSiteMode.Strict,
-                    Secure = Request.IsHttps,
+                    Secure = true,
                     Expires = DateTimeOffset.UtcNow.AddDays(30)
                 });
 

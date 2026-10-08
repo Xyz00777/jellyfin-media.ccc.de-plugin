@@ -55,7 +55,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public async Task StartAsync_logs_the_token_so_an_administrator_can_copy_it()
+        public async Task StartAsync_points_at_the_token_file_without_printing_the_token()
         {
             Directory.CreateDirectory(_pluginConfigPath);
             try
@@ -66,12 +66,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 await service.StartAsync(CancellationToken.None);
 
                 var line = string.Join("\n", warnings);
-                Assert.Contains("paste the access token", line, StringComparison.OrdinalIgnoreCase);
 
-                // The token value itself has to appear, otherwise there is nothing to paste.
+                // The token is a reusable bearer credential for settings access. Logs get
+                // exported, shipped to support, and archived, so the value must never be
+                // written there; the administrator reads it from the file instead.
                 var tokenStore = new SettingsAccessTokenStore(_pluginConfigPath);
                 var token = await tokenStore.GetAsync(CancellationToken.None);
-                Assert.Contains(token, line, StringComparison.Ordinal);
+                Assert.DoesNotContain(token, line, StringComparison.Ordinal);
+                Assert.DoesNotContain("Token: ", line, StringComparison.Ordinal);
+                Assert.Contains(tokenStore.FilePath, line, StringComparison.Ordinal);
             }
             finally
             {

@@ -57,6 +57,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
                     _cached = Convert.ToHexString(RandomNumberGenerator.GetBytes(TokenByteLength));
                     await File.WriteAllTextAsync(_path, _cached, cancellationToken).ConfigureAwait(false);
+                    RestrictToOwner(_path);
                 }
 
                 return _cached;
@@ -77,6 +78,41 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             return CryptographicOperations.FixedTimeEquals(
                 Encoding.UTF8.GetBytes(candidate),
                 Encoding.UTF8.GetBytes(expected));
+        }
+
+        /// <summary>
+        /// Gets the path the token is stored at, so the administrator can be told where to
+        /// read it instead of having it written to the server log.
+        /// </summary>
+        public string FilePath => _path;
+
+        /// <summary>
+        /// Narrows the token file to the account that created it. The token grants plugin
+        /// settings access, so it must not be readable by every local account that can
+        /// reach the plugin configuration directory.
+        /// </summary>
+        private static void RestrictToOwner(string path)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                // Windows inherits the ACL from the plugin configuration directory, which
+                // Jellyfin already restricts to its service account.
+                return;
+            }
+
+            try
+            {
+                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            catch (PlatformNotSupportedException)
+            {
+            }
         }
     }
 }

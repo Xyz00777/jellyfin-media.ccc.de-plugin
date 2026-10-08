@@ -7,6 +7,7 @@ using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Jellyfin.Plugin.MediaCccDe.Controllers
@@ -138,6 +139,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             {
                 throw;
             }
+            catch (DownloadQuotaExceededException ex)
+            {
+                return Content(
+                    BrowsePageHtml.Render(identity.Name, null, query, year, null, null, false, false, false, language, translations, ex.Message),
+                    "text/html");
+            }
             catch
             {
                 return Redirect(BrowsePageHtml.BuildUrl(language, query, year, conference, "retry"));
@@ -149,8 +156,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         {
             var language = PluginLanguage.Resolve(Request);
             var translations = Translations.For(language);
+
+            if (!CredentialTransportGuard.AllowsCredentialSubmission(Request))
+            {
+                return StatusCode(StatusCodes.Status426UpgradeRequired, translations["userSettings.error.httpsRequired"]);
+            }
+
             var form = await Request.ReadFormAsync(cancellationToken).ConfigureAwait(false);
-            var identity = await _identityVerifier.VerifyAsync(_userPageSession.ReadApiKey(Request), cancellationToken).ConfigureAwait(false);
+            var (username, password) = _userPageSession.ReadCredentials(Request);
+            var identity = await _identityVerifier.VerifyAsync(username, password, cancellationToken).ConfigureAwait(false);
             if (identity is null)
             {
                 return Content(

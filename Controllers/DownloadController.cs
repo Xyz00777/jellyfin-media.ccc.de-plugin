@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Jellyfin.Plugin.MediaCccDe.Controllers
@@ -51,10 +52,17 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
                 return BadRequest(new { error = "Event GUID cannot be empty" });
             }
 
-            var item = await _downloadService
-                .EnqueueAsync(userId.Value, eventGuid, cancellationToken)
-                .ConfigureAwait(false);
-            return item == null ? NotFound(new { error = "Event or recording not found" }) : Accepted(item);
+            try
+            {
+                var item = await _downloadService
+                    .EnqueueAsync(userId.Value, eventGuid, cancellationToken)
+                    .ConfigureAwait(false);
+                return item == null ? NotFound(new { error = "Event or recording not found" }) : Accepted(item);
+            }
+            catch (DownloadQuotaExceededException ex)
+            {
+                return StatusCode(StatusCodes.Status429TooManyRequests, new { error = ex.Message });
+            }
         }
     }
 }

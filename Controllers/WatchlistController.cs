@@ -6,6 +6,7 @@ using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Services;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -85,7 +86,14 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         {
             var language = PluginLanguage.Resolve(Request);
             var translations = Translations.For(language);
-            var identity = await _identityVerifier.VerifyAsync(_userPageSession.ReadApiKey(Request), cancellationToken).ConfigureAwait(false);
+
+            if (!CredentialTransportGuard.AllowsCredentialSubmission(Request))
+            {
+                return StatusCode(StatusCodes.Status426UpgradeRequired, translations["userSettings.error.httpsRequired"]);
+            }
+
+            var (username, password) = _userPageSession.ReadCredentials(Request);
+            var identity = await _identityVerifier.VerifyAsync(username, password, cancellationToken).ConfigureAwait(false);
             if (identity is null)
             {
                 return Content(WatchlistPageHtml.Render(null, null, null, translations["userSettings.error.keyRejected"], language, translations), "text/html");
@@ -110,7 +118,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             await _userDataManager.EnsureLoadedAsync(identity.Id).ConfigureAwait(false);
             foreach (var eventGuid in _userDataManager.GetWatchlist(identity.Id))
             {
-                await _downloadService.EnqueueAsync(identity.Id, eventGuid, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await _downloadService.EnqueueAsync(identity.Id, eventGuid, cancellationToken).ConfigureAwait(false);
+                }
+                catch (DownloadQuotaExceededException)
+                {
+                    // One refusal must not abandon the rest of the watchlist; the next
+                    // visit shows the queue with whatever fit under the limits.
+                    break;
+                }
             }
 
             return Redirect(WatchlistPageHtml.PagePath + "?lang=" + PluginLanguage.Resolve(Request));
