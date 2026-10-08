@@ -85,11 +85,39 @@ After installation, configure the plugin in Jellyfin Dashboard > Plugins > Media
 |---------|-------------|---------|
 | Watchlist Path | Directory for downloaded watchlist videos; empty uses Jellyfin's plugin configuration directory | empty |
 | Preferred Quality | Video quality preference | HD |
+| Preferred Audio Languages | Ordered ISO 639-1 codes; a file containing both of the top two is preferred over either single-language file | empty |
+| Preferred Subtitle Languages | Ordered ISO 639-1 codes, used when downloading subtitles | empty |
 | Sync Interval | How often to check for new content | 6 hours |
+| Download Subtitles | Fetch each talk's subtitle beside its `.strm`. Off by default | off |
+
+### Opening the settings on Jellyfin 12
+
+Jellyfin 12's dashboard renders plugin pages but does not execute their scripts, so
+this plugin serves the settings page itself instead:
+
+```
+http://<your-jellyfin>/media_ccc/settings
+```
+
+On first use, unlock it with the access token printed in the Jellyfin server log
+when the plugin starts:
+
+```
+Media.CCC.de settings can be edited at /media_ccc/settings?token=<token> ...
+```
+
+Paste that token into the form once. It is stored in
+`<plugin-config-dir>/settings-access.txt`, unlocks the page for 30 days, and
+should be treated as a secret. Per-user language preferences are set through
+`POST /media_ccc/languages/audio`, or with the server-wide default above.
 
 ## Usage
 
 ### Browse Conferences
+
+The dashboard pages link to the plugin's own pages. On Jellyfin 12 they are
+plain links rather than interactive forms, because that dashboard does not run
+plugin page scripts.
 
 1. Navigate to **Dashboard > MediaCCC.de > Browse**
 2. Browse all available conferences
