@@ -72,3 +72,27 @@ The hook is a local pre-commit hook, so it needs no network access. Install the 
 ## Pull requests
 
 Fork the repository, create a branch, and keep commits focused with clear messages. Make sure `dotnet test` passes, and describe what changed and why in your pull request.
+
+## GitHub repository metadata
+
+The values to paste into the repository's **Settings > General** fields on GitHub.
+
+**Description** (the "About" line):
+
+```text
+Jellyfin plugin that syncs the media.ccc.de conference archive into your library as TV series, with per-user audio and subtitle languages and a German/English interface.
+```
+
+**Topics** (20 max, lowercase and hyphens only):
+
+```text
+jellyfin, jellyfin-plugin, media-ccc-de, chaos-computer-club, ccc, conferences, metadata, strim, subtitles, dotnet
+```
+
+`jellyfin` and `jellyfin-plugin` are the conventions established plugins use. The rest only help people find the repository by browsing GitHub; Jellyfin discovers plugins through a repository `manifest.json` URL, not through topics.
+
+Note for anyone adding a description: a competing plugin exists at
+[`praetorianer777/chaosflix-jellyfin`](https://github.com/praetorianer777/chaosflix-jellyfin).
+It is a **Channels** plugin (browse, watch history, resume, SyncPlay). This one is a
+**Metadata** plugin: it synchronizes the archive into the library as TV series. Keep that
+distinction visible in the description so the two are not mistaken for each other.

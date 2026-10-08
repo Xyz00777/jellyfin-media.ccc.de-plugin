@@ -307,6 +307,17 @@ If automatic `CCC Archive` library creation fails, an error is logged saying `Ma
 
 MIT. See [LICENSE](LICENSE).
 
+### Content licensing
+
+The MIT licence covers **this plugin's source code only**. The plugin ships no media: it writes `.strm` files that point at `media.ccc.de`, and it stores subtitles downloaded from that site. Nothing is redistributed here.
+
+The talks themselves are published by the Chaos Computer Club under **per-talk licences**, typically Creative Commons Attribution 4.0, shown in the recording's intro or outro or in its metadata. See [media.ccc.de/about.html](https://media.ccc.de/about.html). If a recording carries no encoded licence, the Chaos Computer Club asks that you contact the event organisers via the "Fahrplan" link on the recording's page.
+
+Two consequences worth knowing before you enable subtitle downloads:
+
+- Attribution requirements belong to the recording, not to this plugin. If you redistribute a talk or its subtitles, credit the speaker and conference and link the licence.
+- A subtitle fetched by this plugin is a derivative of a Creative Commons work. CC BY permits that, but the licence terms travel with the file, and a sidecar sitting in a Jellyfin library folder may not display the attribution its recording requires. Check the terms for the specific talk if you intend to redistribute anything.
+
 ## Contributing
 
 Contributions can be submitted as pull requests. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, conventions, and review process.

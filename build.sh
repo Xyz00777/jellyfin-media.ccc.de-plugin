@@ -32,7 +32,8 @@ check_dotnet() {
         exit 1
     fi
 
-    local version=$(dotnet --version 2>/dev/null || echo "0")
+    local version
+    version=$(dotnet --version 2>/dev/null || echo "0")
     if [[ ! "$version" =~ ^10 ]]; then
         echo -e "${YELLOW}WARNING: dotnet version $version detected, but .NET 10.0 is recommended${NC}"
         echo "  The plugin targets net10.0. Build may fail."
@@ -90,7 +91,7 @@ test() {
 clean() {
     echo -e "${YELLOW}Cleaning build artifacts...${NC}"
     dotnet clean "$SCRIPT_DIR/Jellyfin.Plugin.MediaCccDe.sln"
-    rm -rf "$SCRIPT_DIR/bin" "$SCRIPT_DIR/obj" "$SCRIPT_DIR/Tests/bin" "$SCRIPT_DIR/Tests/obj"
+    rm -rf "${SCRIPT_DIR:?}/bin" "${SCRIPT_DIR:?}/obj" "${SCRIPT_DIR:?}/Tests/bin" "${SCRIPT_DIR:?}/Tests/obj"
     echo -e "${GREEN}Clean complete!${NC}"
 }
 
