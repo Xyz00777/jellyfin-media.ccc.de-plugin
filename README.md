@@ -108,8 +108,23 @@ Media.CCC.de settings can be edited at /media_ccc/settings?token=<token> ...
 
 Paste that token into the form once. It is stored in
 `<plugin-config-dir>/settings-access.txt`, unlocks the page for 30 days, and
-should be treated as a secret. Per-user language preferences are set through
-`POST /media_ccc/languages/audio`, or with the server-wide default above.
+should be treated as a secret. ### Per-user language preferences
+
+Each user can set their own audio and subtitle languages at:
+
+```
+http://<your-jellyfin>/media_ccc/settings/languages
+```
+
+The first visit asks for your own Jellyfin API key (Dashboard > Advanced > API
+Keys) so the page can tell which account to save for. The key is checked against
+the server and then discarded; it is never stored or logged. After that a
+signed cookie remembers you for 90 days.
+
+These preferences apply to watchlist downloads. Streaming always uses the single
+shared `.strm` for a talk, so it cannot vary per user; the server-wide defaults
+above decide what that file points at. The same settings are available as
+`GET`/`POST /media_ccc/languages/audio` and `/media_ccc/languages/subtitles`.
 
 ## Usage
 
@@ -133,10 +148,11 @@ plugin page scripts.
 
 ### Language Preferences
 
-1. Go to **Dashboard > MediaCCC.de > Language Preferences**
-2. Add and reorder your preferred audio languages
-3. Add and reorder your preferred subtitle languages
-4. Languages are tried in order when selecting recordings
+**Dashboard > MediaCCC.de > Language Preferences** links to
+`/media_ccc/settings/languages`, where you confirm your account once with your
+own Jellyfin API key and then choose your preferred audio and subtitle
+languages. Languages are tried in order when a watchlist talk is downloaded for
+you.
 
 ### Sync Log (Admin Only)
 
