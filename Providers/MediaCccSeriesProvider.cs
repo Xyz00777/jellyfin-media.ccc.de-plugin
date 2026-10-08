@@ -16,7 +16,7 @@ using MediaBrowser.Model.Providers;
 
 namespace Jellyfin.Plugin.MediaCccDe.Providers
 {
-    public class MediaCccSeriesProvider : IRemoteMetadataProvider<Series, SeriesInfo>, IImageProvider
+    public class MediaCccSeriesProvider : IRemoteMetadataProvider<Series, SeriesInfo>, IRemoteImageProvider
     {
         private readonly IMediaCccApiClient _apiClient;
         private readonly IHttpClientFactory _httpClientFactory;
@@ -128,7 +128,51 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
             return item is Series;
         }
 
-        public IEnumerable<ImageType> SupportedImageTypes => new[] { ImageType.Primary };
+        public IEnumerable<ImageType> GetSupportedImages(BaseItem item)
+        {
+            return new[] { ImageType.Primary };
+        }
+
+        /// <summary>
+        /// Series carry the conference acronym as their provider id, so the logo is
+        /// resolved from the cached conference list on demand.
+        /// </summary>
+        public async Task<IEnumerable<RemoteImageInfo>> GetImages(BaseItem item, CancellationToken cancellationToken)
+        {
+            if (item is not Series series
+                || !series.ProviderIds.TryGetValue("MediaCccDe", out var identifier)
+                || string.IsNullOrWhiteSpace(identifier))
+            {
+                return Array.Empty<RemoteImageInfo>();
+            }
+
+            var conferences = await GetConferencesWithCacheAsync(cancellationToken).ConfigureAwait(false);
+
+            var match = conferences.FirstOrDefault(c =>
+                string.Equals(c.Acronym, identifier, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(c.Slug, identifier, StringComparison.OrdinalIgnoreCase));
+
+            if (match == null)
+            {
+                return Array.Empty<RemoteImageInfo>();
+            }
+
+            var logoUrl = ResolveLogoUrl(match);
+            if (string.IsNullOrWhiteSpace(logoUrl))
+            {
+                return Array.Empty<RemoteImageInfo>();
+            }
+
+            return new[]
+            {
+                new RemoteImageInfo
+                {
+                    Url = logoUrl,
+                    Type = ImageType.Primary,
+                    ProviderName = Name
+                }
+            };
+        }
 
         public async Task<HttpResponseMessage> GetImageResponse(string url, CancellationToken cancellationToken)
         {

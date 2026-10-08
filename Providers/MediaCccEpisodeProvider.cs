@@ -24,7 +24,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
     /// Episode = Talk from a conference.
     /// Season = conference day, IndexNumber = running order within that day.
     /// </summary>
-    public class MediaCccEpisodeProvider : IRemoteMetadataProvider<Episode, EpisodeInfo>, IImageProvider
+    public class MediaCccEpisodeProvider : IRemoteMetadataProvider<Episode, EpisodeInfo>, IRemoteImageProvider
     {
         internal const string ProviderIdKey = "MediaCccDe";
         private const int OverviewMaxLines = 4;
@@ -120,7 +120,60 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
             return item is Episode;
         }
 
-        public IEnumerable<ImageType> SupportedImageTypes => new[] { ImageType.Primary };
+        public IEnumerable<ImageType> GetSupportedImages(BaseItem item)
+        {
+            return new[] { ImageType.Primary };
+        }
+
+        /// <summary>
+        /// Jellyfin asks the registered image providers for artwork per item, so the
+        /// poster is resolved here from the slug rather than pushed through
+        /// MetadataResult.RemoteImages, which no provider consumes on its own.
+        /// </summary>
+        public async Task<IEnumerable<RemoteImageInfo>> GetImages(BaseItem item, CancellationToken cancellationToken)
+        {
+            if (item is not Episode episode)
+            {
+                return Array.Empty<RemoteImageInfo>();
+            }
+
+            var slug = episode.ProviderIds.TryGetValue(ProviderIdKey, out var storedId)
+                ? storedId
+                : episode.OriginalTitle;
+
+            if (string.IsNullOrWhiteSpace(slug))
+            {
+                return Array.Empty<RemoteImageInfo>();
+            }
+
+            var acronym = ResolveConferenceAcronym(episode.Path);
+            if (acronym is null)
+            {
+                return Array.Empty<RemoteImageInfo>();
+            }
+
+            var schedule = await _scheduleCache.GetAsync(acronym, cancellationToken).ConfigureAwait(false);
+            if (schedule is null || !schedule.TryGet(slug, slug, out var scheduled) || scheduled is null)
+            {
+                return Array.Empty<RemoteImageInfo>();
+            }
+
+            var posterUrl = scheduled.Event.PosterUrl;
+            if (string.IsNullOrWhiteSpace(posterUrl))
+            {
+                return Array.Empty<RemoteImageInfo>();
+            }
+
+            return new[]
+            {
+                new RemoteImageInfo
+                {
+                    Url = posterUrl,
+                    Type = ImageType.Primary,
+                    ProviderName = Name
+                }
+            };
+        }
 
         public async Task<HttpResponseMessage> GetImageResponse(string url, CancellationToken cancellationToken)
         {

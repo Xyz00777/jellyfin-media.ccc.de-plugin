@@ -86,15 +86,15 @@ public class ServiceRegistrator : IPluginServiceRegistrator
     private static void RegisterProviders(IServiceCollection serviceCollection)
     {
         // Jellyfin instantiates IRemoteMetadataProvider implementations on its own, but
-        // IImageProvider implementations are only ever discovered through DI, so without
-        // these the artwork returned in MetadataResult.RemoteImages is never fetched.
+        // image providers are only ever discovered through DI, and only IRemoteImageProvider
+        // exposes the GetImages call that Jellyfin uses to discover artwork per item.
         serviceCollection.TryAddEnumerable(
             ServiceDescriptor.Singleton<IRemoteMetadataProvider<Series, SeriesInfo>, MediaCccSeriesProvider>());
         serviceCollection.TryAddEnumerable(
             ServiceDescriptor.Singleton<IRemoteMetadataProvider<Episode, EpisodeInfo>, MediaCccEpisodeProvider>());
         serviceCollection.TryAddEnumerable(
-            ServiceDescriptor.Singleton<IImageProvider, MediaCccSeriesProvider>());
+            ServiceDescriptor.Singleton<IRemoteImageProvider, MediaCccSeriesProvider>());
         serviceCollection.TryAddEnumerable(
-            ServiceDescriptor.Singleton<IImageProvider, MediaCccEpisodeProvider>());
+            ServiceDescriptor.Singleton<IRemoteImageProvider, MediaCccEpisodeProvider>());
     }
 }

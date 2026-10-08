@@ -442,7 +442,68 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             Assert.True(_provider.Supports(new Episode()));
             Assert.False(_provider.Supports(new Series()));
-            Assert.Contains(ImageType.Primary, _provider.SupportedImageTypes);
+            Assert.Contains(ImageType.Primary, _provider.GetSupportedImages(new Episode()));
+        }
+
+        [Fact]
+        public async Task GetImages_returns_the_poster_for_a_known_episode()
+        {
+            var poster = "https://static.media.ccc.de/media/congress/2023/1234-abc_preview.jpg";
+            GivenConference("37c3", Talk("a", "Poster", "2023-12-27T10:00:00+01:00", poster));
+
+            var episode = new Episode { ProviderIds = { { "MediaCccDe", "a" } } };
+            episode.Path = $"{ArchiveRoot}/37c3/Season 01/a.strm";
+
+            var images = (await _provider.GetImages(episode, CancellationToken.None)).ToList();
+
+            var image = Assert.Single(images);
+            Assert.Equal(poster, image.Url);
+            Assert.Equal(ImageType.Primary, image.Type);
+            Assert.Equal(_provider.Name, image.ProviderName);
+        }
+
+        [Fact]
+        public async Task GetImages_falls_back_to_the_slug_when_no_provider_id_is_stored()
+        {
+            var poster = "https://static.media.ccc.de/media/congress/2023/9-xyz_preview.jpg";
+            GivenConference("37c3", Talk("a", "Poster", "2023-12-27T10:00:00+01:00", poster));
+
+            var episode = new Episode { OriginalTitle = "a" };
+            episode.Path = $"{ArchiveRoot}/37c3/Season 01/a.strm";
+
+            var images = (await _provider.GetImages(episode, CancellationToken.None)).ToList();
+
+            Assert.Single(images);
+        }
+
+        [Fact]
+        public async Task GetImages_is_empty_without_a_poster()
+        {
+            GivenConference("37c3", Talk("a", "NoPoster", "2023-12-27T10:00:00+01:00"));
+
+            var episode = new Episode { ProviderIds = { { "MediaCccDe", "a" } } };
+            episode.Path = $"{ArchiveRoot}/37c3/Season 01/a.strm";
+
+            Assert.Empty(await _provider.GetImages(episode, CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task GetImages_is_empty_for_an_unknown_conference()
+        {
+            var episode = new Episode { ProviderIds = { { "MediaCccDe", "a" } } };
+            episode.Path = $"{ArchiveRoot}/nope/Season 01/a.strm";
+
+            _mockApiClient
+                .Setup(x => x.GetConferenceAsync("nope", It.IsAny<CancellationToken>()))
+                .ReturnsAsync((ConferenceDto?)null);
+
+            Assert.Empty(await _provider.GetImages(episode, CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task GetImages_ignores_non_episodes()
+        {
+            Assert.Empty(await _provider.GetImages(new Series(), CancellationToken.None));
         }
 
         #endregion
