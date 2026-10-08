@@ -74,6 +74,7 @@ public class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton(sp => new SettingsAccessTokenStore(
             sp.GetRequiredService<IApplicationPaths>().PluginConfigurationsPath));
         serviceCollection.AddSingleton<IUserDataManager, UserDataManager>();
+        serviceCollection.AddSingleton<UserPageSession>();
         serviceCollection.AddSingleton<IUserLibraryService, UserLibraryService>();
         serviceCollection.AddSingleton<IDownloadQueue, DownloadQueue>();
         serviceCollection.AddSingleton<IFileService, FileService>();

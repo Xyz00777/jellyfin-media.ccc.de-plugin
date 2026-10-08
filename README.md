@@ -30,8 +30,8 @@ No GitHub Releases have been published yet. Once a release is published, its ass
 Clone the repository and build the package:
 
 ```bash
-git clone https://github.com/Xyz00777/jellyfin_ccc-media-de.git
-cd jellyfin_ccc-media-de
+git clone https://github.com/Xyz00777/jellyfin-media-ccc-de.git
+cd jellyfin-media-ccc-de
 ./build.sh release
 ```
 
@@ -257,8 +257,8 @@ Contributions can be submitted as pull requests. See [CONTRIBUTING.md](CONTRIBUT
 
 ## Support
 
-- Issues: [GitHub Issues](https://github.com/Xyz00777/jellyfin_ccc-media-de/issues)
-- Discussions: [GitHub Discussions](https://github.com/Xyz00777/jellyfin_ccc-media-de/discussions)
+- Issues: [GitHub Issues](https://github.com/Xyz00777/jellyfin-media-ccc-de/issues)
+- Discussions: [GitHub Discussions](https://github.com/Xyz00777/jellyfin-media-ccc-de/discussions)
 - Security reports: see [SECURITY.md](SECURITY.md)
 
 ## Credits

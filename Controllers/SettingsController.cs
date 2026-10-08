@@ -37,28 +37,32 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(typeof(string), 200)]
         public async Task<IActionResult> Get(CancellationToken cancellationToken)
         {
+            var language = PluginLanguage.Resolve(Request);
+            var translations = Translations.For(language);
             var token = await _tokenStore.GetAsync(cancellationToken).ConfigureAwait(false);
             var signer = new SettingsCookieSigner(token);
 
             if (signer.Validate(Request.Cookies[SettingsCookieSigner.CookieName], DateTimeOffset.UtcNow))
             {
-                return Content(SettingsPageHtml.Render(_configurationProvider(), null, null), "text/html");
+                return Content(SettingsPageHtml.Render(_configurationProvider(), null, null, language, translations), "text/html");
             }
 
-            return Content(SettingsPageHtml.Render(null, null, null), "text/html");
+            return Content(SettingsPageHtml.Render(null, null, null, language, translations), "text/html");
         }
 
         [HttpPost("unlock")]
         [ProducesResponseType(typeof(string), 200)]
         public async Task<IActionResult> Unlock(CancellationToken cancellationToken)
         {
+            var language = PluginLanguage.Resolve(Request);
+            var translations = Translations.For(language);
             var token = await _tokenStore.GetAsync(cancellationToken).ConfigureAwait(false);
             var candidate = Request.Form["token"].ToString();
 
             if (!_tokenStore.Matches(candidate, token))
             {
                 return Content(
-                    SettingsPageHtml.Render(null, null, "That token was not accepted. Copy the whole value from the server log."),
+                    SettingsPageHtml.Render(null, null, translations["settings.error.tokenRejected"], language, translations),
                     "text/html");
             }
 
@@ -81,12 +85,14 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(typeof(string), 200)]
         public async Task<IActionResult> Save(CancellationToken cancellationToken)
         {
+            var language = PluginLanguage.Resolve(Request);
+            var translations = Translations.For(language);
             var token = await _tokenStore.GetAsync(cancellationToken).ConfigureAwait(false);
             var signer = new SettingsCookieSigner(token);
 
             if (!signer.Validate(Request.Cookies[SettingsCookieSigner.CookieName], DateTimeOffset.UtcNow))
             {
-                return Content(SettingsPageHtml.Render(null, null, "Your session expired. Unlock again to save."), "text/html");
+                return Content(SettingsPageHtml.Render(null, null, translations["settings.error.sessionExpired"], language, translations), "text/html");
             }
 
             var form = Request.Form;
@@ -106,13 +112,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             var plugin = _pluginResolver.Resolve();
             if (plugin is null)
             {
-                return Content(SettingsPageHtml.Render(null, null, "The plugin instance is not loaded yet. Try again in a moment."), "text/html");
+                return Content(SettingsPageHtml.Render(null, null, translations["settings.error.pluginNotLoaded"], language, translations), "text/html");
             }
 
             plugin.UpdateConfiguration(configuration);
 
             return Content(
-                SettingsPageHtml.Render(configuration, "Settings saved. Trigger a sync to apply them to new talks.", null),
+                SettingsPageHtml.Render(configuration, translations["settings.notice.saved"], null, language, translations),
                 "text/html");
         }
 

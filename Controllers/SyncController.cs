@@ -75,5 +75,44 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             await _syncLogger.PersistAsync().ConfigureAwait(false);
             return NoContent();
         }
+
+        [HttpGet("log")]
+        [AllowAnonymous]
+        [Produces("text/html")]
+        public ContentResult GetSyncLogPage()
+        {
+            var language = PluginLanguage.Resolve(Request);
+            var translations = Translations.For(language);
+            var history = _syncLogger.GetSyncHistory(null);
+            return Content(SyncLogPageHtml.Render(history, language, translations), "text/html; charset=utf-8");
+        }
+
+        [HttpPost("log/trigger")]
+        public async Task<IActionResult> TriggerSyncFromPage([FromForm] string? lang = null, CancellationToken cancellationToken = default)
+        {
+            await _syncTrigger.TriggerSyncAsync(cancellationToken).ConfigureAwait(false);
+            var language = PluginLanguage.Resolve(lang, null);
+            return Redirect(SyncLogPageHtml.PagePath + "?lang=" + language);
+        }
+
+        [HttpGet("history/confirm")]
+        [AllowAnonymous]
+        [Produces("text/html")]
+        public ContentResult GetClearSyncHistoryConfirmation()
+        {
+            var language = PluginLanguage.Resolve(Request);
+            var translations = Translations.For(language);
+            return Content(SyncLogPageHtml.RenderClearConfirmation(language, translations), "text/html; charset=utf-8");
+        }
+
+        [HttpPost("history/confirm")]
+        [Produces("text/html")]
+        public async Task<IActionResult> ConfirmClearSyncHistory([FromForm] string? lang = null)
+        {
+            _syncLogger.ClearHistory();
+            await _syncLogger.PersistAsync().ConfigureAwait(false);
+            var language = PluginLanguage.Resolve(lang, null);
+            return Redirect(SyncLogPageHtml.PagePath + "?lang=" + language);
+        }
     }
 }

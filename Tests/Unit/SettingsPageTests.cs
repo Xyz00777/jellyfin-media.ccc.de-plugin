@@ -169,7 +169,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void Locked_page_offers_the_token_form_and_no_settings_fields()
         {
-            var html = SettingsPageHtml.Render(null, null, null);
+            var html = SettingsPageHtml.Render(null, null, null, "en", Translations.For("en"));
 
             Assert.Contains("name=\"token\"", html);
             Assert.DoesNotContain("name=\"WatchlistPath\"", html);
@@ -187,7 +187,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 DownloadSubtitles = true
             };
 
-            var html = SettingsPageHtml.Render(configuration, null, null);
+            var html = SettingsPageHtml.Render(configuration, null, null, "en", Translations.For("en"));
 
             Assert.Contains("value=\"/data/watchlist\"", html);
             Assert.Contains("value=\"12\"", html);
@@ -204,7 +204,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 WatchlistPath = "\"><script>alert(1)</script>"
             };
 
-            var html = SettingsPageHtml.Render(configuration, null, null);
+            var html = SettingsPageHtml.Render(configuration, null, null, "en", Translations.For("en"));
 
             Assert.DoesNotContain("<script>", html);
             Assert.Contains("&lt;script&gt;", html);
@@ -213,7 +213,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void Messages_are_html_encoded()
         {
-            var html = SettingsPageHtml.Render(null, null, "<img src=x onerror=alert(1)>");
+            var html = SettingsPageHtml.Render(null, null, "<img src=x onerror=alert(1)>", "en", Translations.For("en"));
 
             Assert.DoesNotContain("<img src=x", html);
             Assert.Contains("&lt;img", html);
@@ -222,7 +222,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 [Fact]
         public void Quality_is_rendered_so_saving_cannot_wipe_it()
         {
-            var html = SettingsPageHtml.Render(new PluginConfiguration { PreferredQuality = "sd" }, null, null);
+            var html = SettingsPageHtml.Render(new PluginConfiguration { PreferredQuality = "sd" }, null, null, "en", Translations.For("en"));
 
             Assert.Contains("name=\"PreferredQuality\"", html);
             Assert.Contains("value=\"sd\" selected", html);
@@ -231,7 +231,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void Quality_falls_back_to_hd_when_unset()
         {
-            var html = SettingsPageHtml.Render(new PluginConfiguration(), null, null);
+            var html = SettingsPageHtml.Render(new PluginConfiguration(), null, null, "en", Translations.For("en"));
 
             Assert.Contains("value=\"hd\" selected", html);
         }
@@ -239,7 +239,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void Notice_is_shown_when_saved()
         {
-            var html = SettingsPageHtml.Render(new PluginConfiguration(), "Settings saved.", null);
+            var html = SettingsPageHtml.Render(new PluginConfiguration(), "Settings saved.", null, "en", Translations.For("en"));
 
             Assert.Contains("Settings saved.", html);
         }
@@ -247,7 +247,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void Rendered_form_posts_without_javascript()
         {
-            var html = SettingsPageHtml.Render(new PluginConfiguration(), null, null);
+            var html = SettingsPageHtml.Render(new PluginConfiguration(), null, null, "en", Translations.For("en"));
 
             Assert.Contains("method=\"post\"", html);
             Assert.DoesNotContain("<script", html);

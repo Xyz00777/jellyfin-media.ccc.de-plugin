@@ -239,7 +239,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void Anonymous_page_asks_for_an_api_key_and_shows_no_language_fields()
         {
-            var html = UserSettingsPageHtml.Render(null, null, null, null, null);
+            var html = UserSettingsPageHtml.Render(null, null, null, null, null, "en", Translations.For("en"));
 
             Assert.Contains("name=\"apikey\"", html);
             Assert.DoesNotContain("name=\"audio\"", html);
@@ -249,7 +249,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void Identified_page_shows_the_name_and_current_languages()
         {
-            var html = UserSettingsPageHtml.Render("admin", new[] { "en", "de" }, new[] { "de" }, null, null);
+            var html = UserSettingsPageHtml.Render("admin", new[] { "en", "de" }, new[] { "de" }, null, null, "en", Translations.For("en"));
 
             Assert.Contains("admin", html);
             Assert.Contains("value=\"en, de\"", html);
@@ -260,7 +260,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void Api_key_input_is_a_password_field_and_never_prefilled()
         {
-            var html = UserSettingsPageHtml.Render(null, null, null, null, null);
+            var html = UserSettingsPageHtml.Render(null, null, null, null, null, "en", Translations.For("en"));
 
             Assert.Contains("type=\"password\"", html);
             Assert.DoesNotContain("value=\"0123", html);
@@ -269,7 +269,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         [Fact]
         public void User_name_is_html_encoded()
         {
-            var html = UserSettingsPageHtml.Render("<img src=x onerror=alert(1)>", null, null, null, null);
+            var html = UserSettingsPageHtml.Render("<img src=x onerror=alert(1)>", null, null, null, null, "en", Translations.For("en"));
 
             Assert.DoesNotContain("<img src=x", html);
             Assert.Contains("&lt;img", html);

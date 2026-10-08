@@ -31,10 +31,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(typeof(string), 200)]
         public async Task<IActionResult> Get(CancellationToken cancellationToken)
         {
+            var language = PluginLanguage.Resolve(Request);
+            var translations = Translations.For(language);
             var identity = await TryIdentifyAsync(cancellationToken).ConfigureAwait(false);
             if (identity is null)
             {
-                return Content(UserSettingsPageHtml.Render(null, null, null, null, null), "text/html");
+                return Content(UserSettingsPageHtml.Render(null, null, null, null, null, language, translations), "text/html");
             }
 
             await _userDataManager.EnsureLoadedAsync(identity.Id).ConfigureAwait(false);
@@ -43,7 +45,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             var subtitles = _userDataManager.GetPreferredSubtitleLanguages(identity.Id);
 
             return Content(
-                UserSettingsPageHtml.Render(identity.Name, languages, subtitles, null, null),
+                UserSettingsPageHtml.Render(identity.Name, languages, subtitles, null, null, language, translations),
                 "text/html");
         }
 
@@ -51,6 +53,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         [ProducesResponseType(typeof(string), 200)]
         public async Task<IActionResult> Identify(CancellationToken cancellationToken)
         {
+            var language = PluginLanguage.Resolve(Request);
+            var translations = Translations.For(language);
             var token = await _tokenStore.GetAsync(cancellationToken).ConfigureAwait(false);
             var apiKey = Request.Form["apikey"].ToString();
 
@@ -63,7 +67,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
                         null,
                         null,
                         null,
-                        "That key was not accepted by this server. Check it under Dashboard > Advanced > API Keys and try again."),
+                        translations["userSettings.error.keyRejected"],
+                        language,
+                        translations),
                     "text/html");
             }
 
@@ -83,18 +89,20 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
                     Expires = DateTimeOffset.UtcNow.AddDays(90)
                 });
 
-            return Redirect(UserSettingsPageHtml.PagePath);
+            return Redirect(UserSettingsPageHtml.PagePath + "?lang=" + language);
         }
 
         [HttpPost("")]
         [ProducesResponseType(typeof(string), 200)]
         public async Task<IActionResult> Save(CancellationToken cancellationToken)
         {
+            var language = PluginLanguage.Resolve(Request);
+            var translations = Translations.For(language);
             var identity = await TryIdentifyAsync(cancellationToken).ConfigureAwait(false);
             if (identity is null)
             {
                 return Content(
-                    UserSettingsPageHtml.Render(null, null, null, null, "Your session expired. Confirm your API key again."),
+                    UserSettingsPageHtml.Render(null, null, null, null, translations["userSettings.error.sessionExpired"], language, translations),
                     "text/html");
             }
 
@@ -108,7 +116,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             await _userDataManager.PersistAsync(identity.Id).ConfigureAwait(false);
 
             return Content(
-                UserSettingsPageHtml.Render(identity.Name, audio, subtitles, "Saved. Watchlist downloads now use these languages.", null),
+                UserSettingsPageHtml.Render(identity.Name, audio, subtitles, translations["userSettings.notice.saved"], null, language, translations),
                 "text/html");
         }
 

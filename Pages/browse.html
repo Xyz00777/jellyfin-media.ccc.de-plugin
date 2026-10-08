@@ -1,130 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Browse Conferences - MediaCCC</title>
-    <style>
-        .conference-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 1.5rem;
-            padding: 1rem;
-        }
-        
-        .conference-card {
-            background: var(--background-secondary, #1a1a1a);
-            border-radius: 0.5rem;
-            overflow: hidden;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            cursor: pointer;
-            border: 1px solid var(--border-color, #333);
-        }
-        
-        .conference-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        }
-        
-        .conference-card img {
-            width: 100%;
-            height: 160px;
-            object-fit: cover;
-            background: var(--background-tertiary, #2a2a2a);
-        }
-        
-        .conference-card-content {
-            padding: 1rem;
-        }
-        
-        .conference-card h3 {
-            margin: 0 0 0.5rem 0;
-            font-size: 1.1rem;
-            color: var(--text-primary, #fff);
-        }
-        
-        .conference-card .subtitle {
-            margin: 0;
-            font-size: 0.9rem;
-            color: var(--text-secondary, #aaa);
-        }
-        
-        .conference-card .date {
-            display: inline-block;
-            margin-top: 0.5rem;
-            font-size: 0.8rem;
-            color: var(--text-muted, #888);
-        }
-        
-        .filter-bar {
-            display: flex;
-            gap: 1rem;
-            padding: 1rem;
-            background: var(--background-secondary, #1a1a1a);
-            border-radius: 0.5rem;
-            margin-bottom: 1rem;
-        }
-        
-        .filter-bar input[type="search"] {
-            flex: 1;
-            padding: 0.5rem 1rem;
-            border: 1px solid var(--border-color, #333);
-            border-radius: 0.25rem;
-            background: var(--background-primary, #0a0a0a);
-            color: var(--text-primary, #fff);
-            font-size: 1rem;
-        }
-        
-        .filter-bar select {
-            padding: 0.5rem 1rem;
-            border: 1px solid var(--border-color, #333);
-            border-radius: 0.25rem;
-            background: var(--background-primary, #0a0a0a);
-            color: var(--text-primary, #fff);
-            font-size: 1rem;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 3rem;
-            color: var(--text-secondary, #aaa);
-        }
-        
-        .error {
-            text-align: center;
-            padding: 2rem;
-            color: var(--error-color, #d32f2f);
-            background: var(--background-secondary, #1a1a1a);
-            border-radius: 0.5rem;
-            margin: 1rem;
-        }
-        
-        .no-results {
-            text-align: center;
-            padding: 3rem;
-            color: var(--text-secondary, #aaa);
-        }
-    </style>
+    <meta charset="utf-8" />
+    <meta http-equiv="refresh" content="0; url=/media_ccc/browse" />
+    <title>Browse Conferences</title>
 </head>
 <body>
-    <div data-role="page" class="page type-interior withTabs" data-controller="__plugin/browse.js">
-        <div class="content-primary">
-            <h1>Browse Conferences</h1>
-            
-            <div class="filter-bar">
-                <input type="search" id="conferenceSearch" placeholder="Search conferences...">
-                <select id="yearFilter">
-                    <option value="">All Years</option>
-                </select>
-            </div>
-            
-            <div id="conferenceGrid" class="conference-grid">
-                <div class="loading">Loading conferences...</div>
-            </div>
-
-            <section id="eventPanel" aria-live="polite" hidden>
-                <h2 id="eventHeading">Events</h2>
-                <div id="eventList"></div>
-            </section>
-        </div>
-    </div>
+<div class="verticalSection" style="max-width:44rem;margin:0 auto;padding:1.5rem;">
+    <h2 style="font-size:1.3rem;margin:0 0 .5rem;">Browse Conferences</h2>
+    <p style="color:#999;">
+        Jellyfin 12 renders plugin pages without running their scripts, so this page cannot
+        browse conferences. The plugin serves the page itself, which works on every Jellyfin
+        version and follows your browser language.
+    </p>
+    <p>
+        <a href="/media_ccc/browse" style="display:inline-block;padding:.6rem 1.4rem;border-radius:.25rem;background:#00a4dc;color:#04121c;font-weight:700;text-decoration:none;">Browse Conferences</a>
+    </p>
+</div>
 </body>
 </html>
