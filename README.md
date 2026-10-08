@@ -88,7 +88,7 @@ After installation, configure the plugin in Jellyfin Dashboard > Plugins > Media
 | Preferred Audio Languages | Ordered ISO 639-1 codes; a file containing both of the top two is preferred over either single-language file | empty |
 | Preferred Subtitle Languages | Ordered ISO 639-1 codes, used when downloading subtitles | empty |
 | Sync Interval | How often to check for new content | 6 hours |
-| Download Subtitles | Fetch each talk's subtitle beside its `.strm`. Off by default | off |
+| Download Subtitles | Pre-fetch subtitles for every talk during a sync. Off by default, and no longer required | off |
 
 ### Opening the settings on Jellyfin 12
 
@@ -108,7 +108,24 @@ Media.CCC.de settings can be edited at /media_ccc/settings?token=<token> ...
 
 Paste that token into the form once. It is stored in
 `<plugin-config-dir>/settings-access.txt`, unlocks the page for 30 days, and
-should be treated as a secret. ### Per-user language preferences
+should be treated as a secret. ### Subtitles
+
+Subtitles are fetched **on demand**, so nothing is downloaded until someone asks
+for one:
+
+1. Open any talk and choose **... > Subtitles > Search for subtitles**.
+2. Tracks published by media.ccc.de appear as **Media.CCC.de** in the list.
+3. Pick one. Jellyfin downloads it and stores it beside the `.strm`, after which
+   it behaves like any local subtitle: available to every client, selectable,
+   and remembered across restarts.
+
+About a third of talks have a subtitle published. Only real subtitle tracks are
+offered, never video or audio.
+
+The `Download Subtitles` setting still pre-fetches subtitles for every talk in
+one sync, which is only useful for seeding a library up front.
+
+### Per-user language preferences
 
 Each user can set their own audio and subtitle languages at:
 
