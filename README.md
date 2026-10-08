@@ -25,7 +25,7 @@ The plugin project references `Jellyfin.Controller` and `Jellyfin.Model` 12.2.0,
 
 ## Installation
 
-No GitHub Releases have been published yet. Once a release is published, each release carries two assets: a plugin ZIP named `media-ccc-de-plugin-<version>.zip`, and a `manifest.json` for Jellyfin's plugin-repository mechanism.
+Each release carries two assets: a plugin ZIP named `media-ccc-de-plugin-<version>.zip`, and a `manifest.json` for Jellyfin's plugin-repository mechanism.
 
 There are three ways to install, in order of convenience:
 
@@ -36,8 +36,8 @@ There are three ways to install, in order of convenience:
 Clone the repository and build the package:
 
 ```bash
-git clone https://github.com/Xyz00777/jellyfin-media-ccc-de.git
-cd jellyfin-media-ccc-de
+git clone https://github.com/Xyz00777/jellyfin-media.ccc.de-plugin.git
+cd jellyfin-media.ccc.de-plugin
 ./build.sh release
 ```
 
@@ -324,8 +324,8 @@ Contributions can be submitted as pull requests. See [CONTRIBUTING.md](CONTRIBUT
 
 ## Support
 
-- Issues: [GitHub Issues](https://github.com/Xyz00777/jellyfin-media-ccc-de/issues)
-- Discussions: [GitHub Discussions](https://github.com/Xyz00777/jellyfin-media-ccc-de/discussions)
+- Issues: [GitHub Issues](https://github.com/Xyz00777/jellyfin-media.ccc.de-plugin/issues)
+- Discussions: [GitHub Discussions](https://github.com/Xyz00777/jellyfin-media.ccc.de-plugin/discussions)
 - Security reports: see [SECURITY.md](SECURITY.md)
 
 ## Credits

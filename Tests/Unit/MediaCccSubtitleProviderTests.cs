@@ -8,7 +8,9 @@ using Jellyfin.Plugin.MediaCccDe.Api;
 using Jellyfin.Plugin.MediaCccDe.Models;
 using Jellyfin.Plugin.MediaCccDe.Providers;
 using Jellyfin.Plugin.MediaCccDe.Services;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Subtitles;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
 
@@ -131,6 +133,260 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                 new SingleHandlerFactory(handler));
 
             return (provider, api);
+        }
+
+        private static MediaCccSubtitleProvider BuildForSidecar(
+            System.Net.Http.HttpMessageHandler handler,
+            ILibraryMonitor? monitor = null,
+            ILogger<MediaCccSubtitleProvider>? logger = null)
+        {
+            var api = new Mock<IMediaCccApiClient>();
+            return new MediaCccSubtitleProvider(
+                api.Object,
+                new ConferenceScheduleCache(api.Object),
+                new SingleHandlerFactory(handler),
+                monitor,
+                logger);
+        }
+
+        private sealed class BodyHandler : System.Net.Http.HttpMessageHandler
+        {
+            private readonly byte[] _body;
+            private readonly System.Net.HttpStatusCode _status;
+
+            public BodyHandler(byte[] body, System.Net.HttpStatusCode status = System.Net.HttpStatusCode.OK)
+            {
+                _body = body;
+                _status = status;
+            }
+
+            public int Calls { get; private set; }
+
+            protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(
+                System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                Calls++;
+                return Task.FromResult(new System.Net.Http.HttpResponseMessage(_status)
+                {
+                    Content = new System.Net.Http.ByteArrayContent(_body)
+                });
+            }
+        }
+
+        private sealed class CapturingLogger : ILogger<MediaCccSubtitleProvider>
+        {
+            public List<(LogLevel Level, string Message)> Entries { get; } = new List<(LogLevel, string)>();
+
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                Entries.Add((logLevel, formatter(state, exception)));
+            }
+        }
+
+        private static string MakeTempDir()
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "ccc-sidecar-tests", Guid.NewGuid().ToString());
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+
+        [Fact]
+        public async Task SaveSidecarAsync_writes_the_srt_next_to_the_strm()
+        {
+            var dir = MakeTempDir();
+            try
+            {
+                var strm = Path.Combine(dir, "37c3-57926-talk.strm");
+                File.WriteAllText(strm, "https://cdn.media.ccc.de/v/talk.mp4");
+                var expected = System.Text.Encoding.UTF8.GetBytes("1\n00:00:00,000 --> 00:00:01,000\nHello\n");
+
+                var provider = BuildForSidecar(new BodyHandler(expected));
+
+                var saved = await provider.SaveSidecarAsync(SrtUrl, strm, CancellationToken.None);
+
+                Assert.True(saved);
+                var sidecar = Path.Combine(dir, "37c3-57926-talk.srt");
+                Assert.True(File.Exists(sidecar));
+                Assert.Equal(expected, await File.ReadAllBytesAsync(sidecar));
+            }
+            finally
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public async Task SaveSidecarAsync_notifies_the_library_monitor_so_the_scanner_registers_the_file()
+        {
+            var dir = MakeTempDir();
+            try
+            {
+                var strm = Path.Combine(dir, "talk.strm");
+                File.WriteAllText(strm, "https://cdn.media.ccc.de/v/talk.mp4");
+
+                var monitor = new Mock<ILibraryMonitor>(MockBehavior.Loose);
+                var provider = BuildForSidecar(
+                    new BodyHandler(System.Text.Encoding.UTF8.GetBytes("subtitle")),
+                    monitor.Object);
+
+                await provider.SaveSidecarAsync(SrtUrl, strm, CancellationToken.None);
+
+                var sidecar = Path.Combine(dir, "talk.srt");
+                monitor.Verify(
+                    m => m.ReportFileSystemChangeBeginning(sidecar),
+                    Times.Once);
+                monitor.Verify(
+                    m => m.ReportFileSystemChangeComplete(sidecar, true),
+                    Times.Once);
+            }
+            finally
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public async Task SaveSidecarAsync_warns_that_the_workaround_is_temporary()
+        {
+            var dir = MakeTempDir();
+            try
+            {
+                var strm = Path.Combine(dir, "talk.strm");
+                File.WriteAllText(strm, "https://cdn.media.ccc.de/v/talk.mp4");
+
+                var logger = new CapturingLogger();
+                var provider = BuildForSidecar(
+                    new BodyHandler(System.Text.Encoding.UTF8.GetBytes("subtitle")),
+                    null,
+                    logger);
+
+                await provider.SaveSidecarAsync(SrtUrl, strm, CancellationToken.None);
+
+                Assert.Contains(
+                    logger.Entries,
+                    entry => entry.Level == LogLevel.Warning
+                        && entry.Message.Contains("TEMPORARY", StringComparison.Ordinal)
+                        && entry.Message.Contains("18352", StringComparison.Ordinal));
+            }
+            finally
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public async Task SaveSidecarAsync_keeps_an_existing_non_empty_sidecar_and_does_not_refetch()
+        {
+            var dir = MakeTempDir();
+            try
+            {
+                var strm = Path.Combine(dir, "talk.strm");
+                File.WriteAllText(strm, "https://cdn.media.ccc.de/v/talk.mp4");
+                var sidecar = Path.Combine(dir, "talk.srt");
+                await File.WriteAllTextAsync(sidecar, "already here");
+
+                var handler = new BodyHandler(System.Text.Encoding.UTF8.GetBytes("replacement"));
+                var provider = BuildForSidecar(handler);
+
+                var saved = await provider.SaveSidecarAsync(SrtUrl, strm, CancellationToken.None);
+
+                Assert.True(saved);
+                Assert.Equal(0, handler.Calls);
+                Assert.Equal("already here", await File.ReadAllTextAsync(sidecar));
+            }
+            finally
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public async Task SaveSidecarAsync_replaces_an_empty_sidecar()
+        {
+            var dir = MakeTempDir();
+            try
+            {
+                var strm = Path.Combine(dir, "talk.strm");
+                File.WriteAllText(strm, "https://cdn.media.ccc.de/v/talk.mp4");
+                var sidecar = Path.Combine(dir, "talk.srt");
+                await File.WriteAllTextAsync(sidecar, string.Empty);
+
+                var expected = System.Text.Encoding.UTF8.GetBytes("fresh");
+                var provider = BuildForSidecar(new BodyHandler(expected));
+
+                var saved = await provider.SaveSidecarAsync(SrtUrl, strm, CancellationToken.None);
+
+                Assert.True(saved);
+                Assert.Equal(expected, await File.ReadAllBytesAsync(sidecar));
+            }
+            finally
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public async Task SaveSidecarAsync_refuses_a_missing_media_path(string? mediaPath)
+        {
+            var provider = BuildForSidecar(new BodyHandler(System.Text.Encoding.UTF8.GetBytes("x")));
+
+            Assert.False(await provider.SaveSidecarAsync(SrtUrl, mediaPath, CancellationToken.None));
+        }
+
+        [Theory]
+        [InlineData("https://evil.example.com/sub.srt")]
+        [InlineData("https://media.ccc.de.evil.example/sub.srt")]
+        [InlineData("http://cdn.media.ccc.de/plain-http.srt")]
+        public async Task SaveSidecarAsync_refuses_a_subtitle_url_outside_media_ccc_de(string url)
+        {
+            var dir = MakeTempDir();
+            try
+            {
+                var strm = Path.Combine(dir, "talk.strm");
+                File.WriteAllText(strm, "https://cdn.media.ccc.de/v/talk.mp4");
+
+                var provider = BuildForSidecar(new BodyHandler(System.Text.Encoding.UTF8.GetBytes("x")));
+
+                Assert.False(await provider.SaveSidecarAsync(url, strm, CancellationToken.None));
+                Assert.False(File.Exists(Path.Combine(dir, "talk.srt")));
+            }
+            finally
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+
+        [Fact]
+        public async Task SaveSidecarAsync_reports_failure_when_the_download_fails()
+        {
+            var dir = MakeTempDir();
+            try
+            {
+                var strm = Path.Combine(dir, "talk.strm");
+                File.WriteAllText(strm, "https://cdn.media.ccc.de/v/talk.mp4");
+
+                var provider = BuildForSidecar(new StatusHandler(System.Net.HttpStatusCode.NotFound));
+
+                Assert.False(await provider.SaveSidecarAsync(SrtUrl, strm, CancellationToken.None));
+                Assert.False(File.Exists(Path.Combine(dir, "talk.srt")));
+            }
+            finally
+            {
+                Directory.Delete(dir, true);
+            }
         }
 
         private static SubtitleSearchRequest Request()
