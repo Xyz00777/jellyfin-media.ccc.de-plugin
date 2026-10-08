@@ -12,8 +12,13 @@ namespace Jellyfin.Plugin.MediaCccDe
         public Plugin(IApplicationPaths appPaths, IXmlSerializer xmlSerializer) 
             : base(appPaths, xmlSerializer) { }
         
+        internal static readonly Guid PluginGuid = Guid.Parse("e225c91a-ef11-41ca-b913-6491f15c2992");
+
+        internal static readonly Version PluginVersion = typeof(Plugin).Assembly.GetName().Version
+            ?? new Version(0, 0, 0, 0);
+
         public override string Name => "MediaCCCDe";
-        public override Guid Id => Guid.Parse("e225c91a-ef11-41ca-b913-6491f15c2992");
+        public override Guid Id => PluginGuid;
         public override string Description => "Integrates media.ccc.de conference recordings into Jellyfin";
         
         public IEnumerable<PluginPageInfo> GetPages()

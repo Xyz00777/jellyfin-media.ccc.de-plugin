@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net.Http.Headers;
 using Jellyfin.Plugin.MediaCccDe.Api;
+using Jellyfin.Plugin.MediaCccDe.Controllers;
 using Jellyfin.Plugin.MediaCccDe.Services;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
@@ -20,11 +21,6 @@ namespace Jellyfin.Plugin.MediaCccDe;
 public class ServiceRegistrator : IPluginServiceRegistrator
 {
     private const string ArchiveFolderName = "archive";
-
-    private static readonly Guid PluginId = Guid.Parse("e225c91a-ef11-41ca-b913-6491f15c2992");
-
-    private static readonly Version PluginVersion = typeof(Plugin).Assembly.GetName().Version
-        ?? new Version(0, 0, 0, 0);
 
     public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
     {
@@ -57,6 +53,9 @@ public class ServiceRegistrator : IPluginServiceRegistrator
             return new StrmFileGeneratorAdapter(recordingSelector);
         });
         serviceCollection.AddSingleton<ISyncLogger, SyncLogger>();
+        serviceCollection.AddSingleton<PluginInstanceResolver, PluginInstanceResolver>();
+        serviceCollection.AddSingleton(sp => new SettingsAccessTokenStore(
+            sp.GetRequiredService<IApplicationPaths>().PluginConfigurationsPath));
         serviceCollection.AddSingleton<IUserDataManager, UserDataManager>();
         serviceCollection.AddSingleton<IUserLibraryService, UserLibraryService>();
         serviceCollection.AddSingleton<IDownloadQueue, DownloadQueue>();
@@ -70,7 +69,7 @@ public class ServiceRegistrator : IPluginServiceRegistrator
             var pluginManager = sp.GetRequiredService<IPluginManager>();
             return () =>
             {
-                var local = pluginManager.GetPlugin(PluginId, PluginVersion);
+                var local = pluginManager.GetPlugin(Plugin.PluginGuid, Plugin.PluginVersion);
                 return (local?.Instance as Plugin)?.Configuration ?? new PluginConfiguration();
             };
         });

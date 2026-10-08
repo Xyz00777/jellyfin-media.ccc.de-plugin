@@ -1,123 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>Settings - MediaCCC.de</title>
+    <meta charset="utf-8" />
+    <title>MediaCCC Settings</title>
 </head>
 <body>
-    <div id="MediaCccSettingsPage" data-role="page" class="page type-interior withTabs" data-require="emby-input,emby-button,emby-select">
-        <div data-role="content">
-            <div class="content-primary">
-                <h1>Settings</h1>
-                <p class="description">Personal preference settings for MediaCCC.de plugin</p>
-
-                <form id="MediaCccSettingsForm">
-                    <div class="verticalSection">
-                        <h2>Storage</h2>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="watchlistPath">Watchlist Download Path</label>
-                            <input is="emby-input" type="text" id="watchlistPath" name="watchlistPath" required />
-                            <div class="fieldDescription">
-                                Directory where downloaded videos are stored. Default: /config/plugins/ccc-media/watchlists/
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="verticalSection">
-                        <h2>Quality</h2>
-                        <div class="selectContainer">
-                            <label class="selectLabel" for="quality">Preferred Quality</label>
-                            <select is="emby-select" id="quality" name="quality">
-                                <option value="hd">HD (High Definition)</option>
-                                <option value="sd">SD (Standard Definition, smaller files)</option>
-                            </select>
-                            <div class="fieldDescription">
-                                Quality preference for downloaded recordings. Falls back to available quality if preferred not found.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="verticalSection">
-                        <h2>Synchronization</h2>
-                        <div class="inputContainer">
-                            <label class="inputLabel inputLabelUnfocused" for="syncInterval">Sync Interval (hours)</label>
-                            <input is="emby-input" type="number" id="syncInterval" name="syncInterval" pattern="[0-9]*" required min="1" max="24" />
-                            <div class="fieldDescription">
-                                How often to check for new conference content. Range: 1-24 hours.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <button is="emby-button" type="submit" class="raised button-submit block">
-                            <span>Save Settings</span>
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <script>
-            (function () {
-                'use strict';
-
-                var PluginSettings = {
-                    pluginId: 'e225c91a-ef11-41ca-b913-6491f15c2992'
-                };
-
-                function loadSettings() {
-                    Dashboard.showLoadingMsg();
-
-                    ApiClient.getPluginConfiguration(PluginSettings.pluginId).then(function (config) {
-                        document.querySelector('#watchlistPath').value = config.WatchlistPath || '';
-                        document.querySelector('#quality').value = config.PreferredQuality || 'hd';
-                        document.querySelector('#syncInterval').value = config.SyncIntervalHours || 6;
-
-                        Dashboard.hideLoadingMsg();
-                    }).catch(function (error) {
-                        Dashboard.hideLoadingMsg();
-                        Dashboard.alert({
-                            title: 'Error',
-                            message: 'Failed to load settings: ' + error.message
-                        });
-                    });
-                }
-
-                function saveSettings(e) {
-                    Dashboard.showLoadingMsg();
-
-                    ApiClient.getPluginConfiguration(PluginSettings.pluginId).then(function (config) {
-                        config.WatchlistPath = document.querySelector('#watchlistPath').value.trim();
-                        config.PreferredQuality = document.querySelector('#quality').value;
-                        config.SyncIntervalHours = parseInt(document.querySelector('#syncInterval').value, 10) || 6;
-
-                        ApiClient.updatePluginConfiguration(PluginSettings.pluginId, config).then(function (result) {
-                            Dashboard.processPluginConfigurationUpdateResult(result);
-                        }).catch(function (error) {
-                            Dashboard.hideLoadingMsg();
-                            Dashboard.alert({
-                                title: 'Error',
-                                message: 'Failed to save settings: ' + error.message
-                            });
-                        });
-                    });
-
-                    e.preventDefault();
-                    return false;
-                }
-
-                // Modern event listener approach (preferred over jQuery 'pageshow')
-                var page = document.querySelector('#MediaCccSettingsPage');
-                if (page) {
-                    page.addEventListener('pageshow', loadSettings);
-                }
-
-                var form = document.querySelector('#MediaCccSettingsForm');
-                if (form) {
-                    form.addEventListener('submit', saveSettings);
-                }
-            })();
-        </script>
-    </div>
+<div class="verticalSection" style="max-width:44rem;margin:0 auto;padding:1.5rem;">
+    <h2 style="font-size:1.3rem;margin:0 0 .5rem;">MediaCCC Settings</h2>
+    <p style="color:#999;">
+        Jellyfin 12 renders plugin pages without running their scripts, so this page cannot
+        read or save your personal preferences.
+    </p>
+    <p style="color:#999;">
+        Per-user preferences are still applied to recording selection, but they have to be set
+        through the plugin API, for example:
+    </p>
+    <p style="background:#1c1c1c;padding:.75rem 1rem;border-radius:.25rem;overflow-x:auto;">
+        <code>POST /media_ccc/languages/audio<br />["en", "de"]</code>
+    </p>
+    <p style="color:#999;font-size:.85rem;">
+        To set a server-wide default instead, use
+        <a href="/media_ccc/settings">Media.CCC.de Settings</a>.
+    </p>
+</div>
 </body>
 </html>
