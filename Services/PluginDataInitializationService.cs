@@ -35,7 +35,9 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             // an administrator with log access can read.
             var token = await _settingsTokenStore.GetAsync(cancellationToken).ConfigureAwait(false);
             _logger.LogWarning(
-                "Media.CCC.de settings can be edited at {Path}?token={Token} appended to this server's base URL. Keep this token private.",
+                "Media.CCC.de settings: open {Path} and paste the access token below into the unlock form. "
+                    + "The token is deliberately not accepted as a query parameter, so that it does not leak into "
+                    + "browser history or server access logs. Keep this token private. Token: {Token}",
                 "/media_ccc/settings",
                 token);
         }
