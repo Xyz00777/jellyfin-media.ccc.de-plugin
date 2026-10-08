@@ -19,12 +19,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             .Concat(new[] { '<', '>', '"', '|', '\0', '\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\u0007', '\u0008', '\u0009', '\u000a', '\u000b', '\u000c', '\u000d', '\u000e', '\u000f' })
             .ToArray();
 
+        private const int LibraryRegistrationAttempts = 40;
+        private static readonly TimeSpan LibraryRegistrationDelay = TimeSpan.FromMilliseconds(250);
+
         private readonly ILibraryManager _libraryManager;
         private readonly IUserManager _userManager;
         private readonly IApplicationPaths _applicationPaths;
         private readonly ILogger<UserLibraryService> _logger;
         private readonly Func<PluginConfiguration>? _configurationProvider;
-        private readonly object _lock = new object();
+        private readonly SemaphoreSlim _registrationGate = new(1, 1);
 
         public UserLibraryService(
             ILibraryManager libraryManager,
@@ -53,7 +56,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             var watchlistBasePath = GetWatchlistBasePath();
             var libraryPath = Path.Combine(watchlistBasePath, sanitizedUsername) + Path.DirectorySeparatorChar;
 
-            lock (_lock)
+            await _registrationGate.WaitAsync().ConfigureAwait(false);
+            try
             {
                 var existingLibrary = FindUserLibrary(userId, sanitizedUsername);
                 if (existingLibrary != null)
@@ -76,13 +80,27 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                     }
                 };
 
-                _libraryManager.AddVirtualFolder(libraryName, CollectionTypeOptions.movies, libraryOptions, false);
+                await _libraryManager.AddVirtualFolder(libraryName, CollectionTypeOptions.movies, libraryOptions, false)
+                    .ConfigureAwait(false);
 
-                var newLibrary = FindUserLibrary(userId, sanitizedUsername);
-                if (newLibrary != null)
+                // AddVirtualFolder registers the folder asynchronously, so it can still be absent
+                // from GetVirtualFolders() on the next call. The gate stays held across the
+                // wait: releasing it first would let a concurrent request register a second
+                // library under the same name.
+                for (var attempt = 0; attempt < LibraryRegistrationAttempts; attempt++)
                 {
-                    return newLibrary;
+                    var newLibrary = FindUserLibrary(userId, sanitizedUsername);
+                    if (newLibrary != null)
+                    {
+                        return newLibrary;
+                    }
+
+                    await Task.Delay(LibraryRegistrationDelay).ConfigureAwait(false);
                 }
+            }
+            finally
+            {
+                _registrationGate.Release();
             }
 
             var finalLibrary = FindUserLibrary(userId, sanitizedUsername);
@@ -91,7 +109,6 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 throw new InvalidOperationException($"Failed to create library for user {username}");
             }
 
-            await Task.CompletedTask.ConfigureAwait(false);
             return finalLibrary;
         }
 

@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Http;
 
 namespace Jellyfin.Plugin.MediaCccDe.Services
@@ -14,11 +15,16 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
     {
         private readonly SettingsAccessTokenStore _tokenStore;
         private readonly IUserDataManager _userDataManager;
+        private readonly IUserManager _userManager;
 
-        public UserPageSession(SettingsAccessTokenStore tokenStore, IUserDataManager userDataManager)
+        public UserPageSession(
+            SettingsAccessTokenStore tokenStore,
+            IUserDataManager userDataManager,
+            IUserManager userManager)
         {
             _tokenStore = tokenStore ?? throw new ArgumentNullException(nameof(tokenStore));
             _userDataManager = userDataManager ?? throw new ArgumentNullException(nameof(userDataManager));
+            _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
         }
 
         /// <summary>
@@ -40,7 +46,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 {
                     HttpOnly = true,
                     SameSite = SameSiteMode.Strict,
-                    Secure = request.IsHttps,
+                    // Always Secure. CredentialTransportGuard has already refused every
+                    // non-loopback cleartext request, so the only way to reach this point
+                    // over HTTP is a local install, where browsers treat the origin as
+                    // trustworthy and accept the cookie anyway.
+                    Secure = true,
                     Expires = DateTimeOffset.UtcNow.AddDays(90)
                 });
 
@@ -67,17 +77,22 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 return null;
             }
 
+            if (!PluginUserAccess.IsActive(_userManager, userId))
+            {
+                return null;
+            }
+
             await _userDataManager.EnsureLoadedAsync(userId).ConfigureAwait(false);
 
             return new JellyfinUserIdentity(userId, _userDataManager.GetUserName(userId) ?? userId.ToString());
         }
 
         /// <summary>
-        /// Reads the API key posted by the identification form.
+        /// Reads the credentials posted by the identification form.
         /// </summary>
-        public string ReadApiKey(HttpRequest request)
+        public (string Username, string Password) ReadCredentials(HttpRequest request)
         {
-            return request.Form["apikey"].ToString();
+            return (request.Form["username"].ToString(), request.Form["password"].ToString());
         }
     }
 }

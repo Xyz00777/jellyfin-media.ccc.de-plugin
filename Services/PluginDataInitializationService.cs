@@ -31,15 +31,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             await _downloadQueue.GetQueueLengthAsync().ConfigureAwait(false);
 
             // Jellyfin 12 does not run plugin page scripts and will not authenticate a
-            // script-free form, so the settings page is unlocked with a token that only
-            // an administrator with log access can read.
-            var token = await _settingsTokenStore.GetAsync(cancellationToken).ConfigureAwait(false);
+            // script-free form, so the settings page is unlocked with a token the
+            // administrator reads from the plugin configuration directory. The token is
+            // never logged: it is a reusable bearer credential for settings access, and
+            // logs are routinely exported, shipped to support, or kept for years.
+            _ = await _settingsTokenStore.GetAsync(cancellationToken).ConfigureAwait(false);
             _logger.LogWarning(
-                "Media.CCC.de settings: open {Path} and paste the access token below into the unlock form. "
-                    + "The token is deliberately not accepted as a query parameter, so that it does not leak into "
-                    + "browser history or server access logs. Keep this token private. Token: {Token}",
+                "Media.CCC.de settings: open {Path} and paste the access token from {TokenFile} "
+                    + "into the unlock form. The token is deliberately not accepted as a query parameter, so that it "
+                    + "does not leak into browser history or server access logs. Keep this token private. To rotate "
+                    + "it, delete that file and restart Jellyfin.",
                 "/media_ccc/settings",
-                token);
+                _settingsTokenStore.FilePath);
         }
 
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

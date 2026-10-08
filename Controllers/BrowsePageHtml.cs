@@ -151,8 +151,10 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             Hidden(html, "q", search);
             Hidden(html, "year", year);
             Hidden(html, "conference", conference);
-            html.Append("<label for=\"apikey\">").Append(HtmlPage.Escape(translations["userSettings.label.apiKey"]))
-                .Append("</label><input id=\"apikey\" name=\"apikey\" type=\"password\" autocomplete=\"off\" required />")
+            html.Append("<label for=\"username\">").Append(HtmlPage.Escape(translations["userSettings.label.username"]))
+                .Append("</label><input id=\"username\" name=\"username\" type=\"text\" autocomplete=\"username\" required />")
+                .Append("<label for=\"password\">").Append(HtmlPage.Escape(translations["userSettings.label.password"]))
+                .Append("</label><input id=\"password\" name=\"password\" type=\"password\" autocomplete=\"current-password\" required />")
                 .Append("<button type=\"submit\">").Append(HtmlPage.Escape(translations["userSettings.button.continue"]))
                 .Append("</button></fieldset></form>");
         }

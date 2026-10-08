@@ -28,15 +28,20 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             public string? LastAuthorization { get; private set; }
 
-            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            public string? LastBody { get; private set; }
+
+            protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             {
                 LastRequest = request;
                 LastAuthorization = request.Headers.Authorization?.ToString();
+                LastBody = request.Content is null
+                    ? null
+                    : await request.Content.ReadAsStringAsync(cancellationToken);
 
-                return Task.FromResult(new HttpResponseMessage(_status)
+                return new HttpResponseMessage(_status)
                 {
                     Content = new StringContent(_body)
-                });
+                };
             }
         }
 
@@ -56,16 +61,17 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
             public HttpClient CreateClient(string name) => new HttpClient(_handler, disposeHandler: false);
         }
 
-        private const string ValidBody = "[{\"Id\":\"c07a505e-4731-415e-a5b3-f8a60a4f508a\",\"Name\":\"admin\"}]";
-
         #region Identity verification
 
-        [Fact]
-        public async Task Valid_key_resolves_the_user_from_the_server_response()
-        {
-            var (verifier, _) = BuildVerifier(HttpStatusCode.OK, ValidBody);
+        private const string ValidBody =
+            "{\"AccessToken\":\"token123\",\"User\":{\"Id\":\"c07a505e-4731-415e-a5b3-f8a60a4f508a\",\"Name\":\"admin\"}}";
 
-            var identity = await verifier.VerifyAsync("0123456789abcdef0123456789abcdef", CancellationToken.None);
+        [Fact]
+        public async Task Valid_credentials_resolve_the_user_from_the_server_response()
+        {
+            var (verifier, handler) = BuildVerifier(HttpStatusCode.OK, ValidBody);
+
+            var identity = await verifier.VerifyAsync("admin", "correct horse", CancellationToken.None);
 
             Assert.NotNull(identity);
             Assert.Equal(Guid.Parse("c07a505e-4731-415e-a5b3-f8a60a4f508a"), identity!.Id);
@@ -81,87 +87,84 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         {
             var (verifier, _) = BuildVerifier(status, string.Empty);
 
-            Assert.Null(await verifier.VerifyAsync("0123456789abcdef0123456789abcdef", CancellationToken.None));
+            Assert.Null(await verifier.VerifyAsync("admin", "correct horse", CancellationToken.None));
         }
 
         [Theory]
-        [InlineData(null)]
-        [InlineData("")]
-        [InlineData("   ")]
-        [InlineData("not-a-hex-key")]
-        [InlineData("0123456789abcdef0123456789abcdeZ")]
-        [InlineData("0123456789abcdef 0123456789abcdef")]
-        public async Task Malformed_keys_never_reach_the_network(string? key)
+        [InlineData(null, "pw")]
+        [InlineData("", "pw")]
+        [InlineData("   ", "pw")]
+        [InlineData("admin", null)]
+        [InlineData("admin", "")]
+        public async Task Missing_credentials_never_reach_the_network(string? username, string? password)
         {
             var (verifier, handler) = BuildVerifier(HttpStatusCode.OK, ValidBody);
 
-            Assert.Null(await verifier.VerifyAsync(key, CancellationToken.None));
+            Assert.Null(await verifier.VerifyAsync(username, password, CancellationToken.None));
             Assert.Null(handler.LastRequest);
         }
 
         [Fact]
-        public async Task Overlong_key_never_reaches_the_network()
+        public async Task Overlong_credentials_never_reach_the_network()
         {
             var (verifier, handler) = BuildVerifier(HttpStatusCode.OK, ValidBody);
 
-            Assert.Null(await verifier.VerifyAsync(new string('a', 500), CancellationToken.None));
+            Assert.Null(await verifier.VerifyAsync(new string('a', 500), "pw", CancellationToken.None));
+            Assert.Null(handler.LastRequest);
+            Assert.Null(await verifier.VerifyAsync("admin", new string('a', 500), CancellationToken.None));
             Assert.Null(handler.LastRequest);
         }
 
         [Fact]
-        public async Task Key_is_sent_as_an_authorization_header_not_in_the_query()
+        public async Task Password_is_sent_in_the_body_never_in_the_query()
         {
             var (verifier, handler) = BuildVerifier(HttpStatusCode.OK, ValidBody);
 
-            await verifier.VerifyAsync("0123456789abcdef0123456789abcdef", CancellationToken.None);
+            await verifier.VerifyAsync("admin", "correct horse", CancellationToken.None);
 
-            Assert.NotNull(handler.LastAuthorization);
-            Assert.Contains("Token=", handler.LastAuthorization!);
+            Assert.NotNull(handler.LastBody);
+            Assert.Contains("correct horse", handler.LastBody!, StringComparison.Ordinal);
             Assert.NotNull(handler.LastRequest!.RequestUri);
-            Assert.DoesNotContain("0123456789abcdef", handler.LastRequest!.RequestUri!.Query);
+            Assert.DoesNotContain("correct", handler.LastRequest!.RequestUri!.Query, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("AuthenticateByName", handler.LastRequest!.RequestUri!.AbsoluteUri, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData("{\"AccessToken\":\"t\"}")]
+        [InlineData("{\"User\":{\"Name\":\"admin\"}}")]
+        [InlineData("{\"User\":{\"Id\":\"not-a-guid\",\"Name\":\"admin\"}}")]
+        [InlineData("{\"User\":{\"Id\":\"00000000-0000-0000-0000-000000000000\",\"Name\":\"admin\"}}")]
+        public async Task A_response_without_a_usable_user_is_rejected(string body)
+        {
+            var (verifier, _) = BuildVerifier(HttpStatusCode.OK, body);
+
+            Assert.Null(await verifier.VerifyAsync("admin", "pw", CancellationToken.None));
         }
 
         [Fact]
-        public async Task Response_without_a_usable_id_is_rejected()
+        public async Task A_missing_name_falls_back_to_the_submitted_username()
         {
-            var (verifier, _) = BuildVerifier(HttpStatusCode.OK, "[{\"Name\":\"admin\"}]");
+            var (verifier, _) = BuildVerifier(HttpStatusCode.OK, "{\"User\":{\"Id\":\"c07a505e-4731-415e-a5b3-f8a60a4f508a\"}}");
 
-            Assert.Null(await verifier.VerifyAsync("0123456789abcdef0123456789abcdef", CancellationToken.None));
+            var identity = await verifier.VerifyAsync("admin", "pw", CancellationToken.None);
+
+            Assert.NotNull(identity);
+            Assert.Equal("admin", identity!.Name);
         }
 
         [Fact]
-        public async Task Empty_guid_is_rejected()
+        public async Task An_unreachable_server_means_no_identity()
         {
-            var (verifier, _) = BuildVerifier(HttpStatusCode.OK, "[{\"Id\":\"00000000-0000-0000-0000-000000000000\",\"Name\":\"x\"}]");
+            var handler = new ThrowingHandler();
+            var verifier = new JellyfinIdentityVerifier(new StubFactory(handler), "http://127.0.0.1:8096");
 
-            Assert.Null(await verifier.VerifyAsync("0123456789abcdef0123456789abcdef", CancellationToken.None));
+            Assert.Null(await verifier.VerifyAsync("admin", "pw", CancellationToken.None));
         }
 
-
-        [Fact]
-        public async Task An_administrator_token_listing_several_users_is_refused()
+        private sealed class ThrowingHandler : HttpMessageHandler
         {
-            var twoUsers = "[{\"Id\":\"c07a505e-4731-415e-a5b3-f8a60a4f508a\",\"Name\":\"admin\"},"
-                + "{\"Id\":\"11111111-2222-3333-4444-555555555555\",\"Name\":\"someone\"}]";
-            var (verifier, _) = BuildVerifier(HttpStatusCode.OK, twoUsers);
-
-            Assert.Null(await verifier.VerifyAsync("0123456789abcdef0123456789abcdef", CancellationToken.None));
-        }
-
-        [Fact]
-        public async Task An_empty_user_list_is_refused()
-        {
-            var (verifier, _) = BuildVerifier(HttpStatusCode.OK, "[]");
-
-            Assert.Null(await verifier.VerifyAsync("0123456789abcdef0123456789abcdef", CancellationToken.None));
-        }
-
-        [Fact]
-        public async Task A_non_array_body_is_refused()
-        {
-            var (verifier, _) = BuildVerifier(HttpStatusCode.OK, "{\"Id\":\"c07a505e-4731-415e-a5b3-f8a60a4f508a\"}");
-
-            Assert.Null(await verifier.VerifyAsync("0123456789abcdef0123456789abcdef", CancellationToken.None));
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+                => throw new HttpRequestException("connection refused");
         }
 
         #endregion
@@ -237,11 +240,13 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         #region Rendering
 
         [Fact]
-        public void Anonymous_page_asks_for_an_api_key_and_shows_no_language_fields()
+        public void Anonymous_page_asks_for_credentials_and_shows_no_language_fields()
         {
             var html = UserSettingsPageHtml.Render(null, null, null, null, null, "en", Translations.For("en"));
 
-            Assert.Contains("name=\"apikey\"", html);
+            Assert.Contains("name=\"username\"", html);
+            Assert.Contains("name=\"password\"", html);
+            Assert.DoesNotContain("name=\"apikey\"", html);
             Assert.DoesNotContain("name=\"audio\"", html);
             Assert.DoesNotContain("<script", html);
         }
@@ -258,11 +263,12 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
         }
 
         [Fact]
-        public void Api_key_input_is_a_password_field_and_never_prefilled()
+        public void The_password_input_is_a_password_field_and_never_prefilled()
         {
             var html = UserSettingsPageHtml.Render(null, null, null, null, null, "en", Translations.For("en"));
 
-            Assert.Contains("type=\"password\"", html);
+            Assert.Contains("type=\"password\" id=\"password\" name=\"password\"", html);
+            Assert.Contains("autocomplete=\"current-password\"", html);
             Assert.DoesNotContain("value=\"0123", html);
         }
 

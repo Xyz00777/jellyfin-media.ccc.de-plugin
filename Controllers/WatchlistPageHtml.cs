@@ -51,9 +51,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             html.Append("<fieldset><legend>").Append(HtmlPage.Escape(translations["userSettings.legend.identify"]))
                 .Append("</legend><p class=\"hint\">").Append(HtmlPage.Escape(translations["userSettings.hint.identify"]))
                 .Append("</p><form method=\"post\" action=\"").Append(PagePath).Append("/identify?lang=")
-                .Append(HtmlPage.Escape(translations.Language)).Append("\"><label for=\"apikey\">")
-                .Append(HtmlPage.Escape(translations["userSettings.label.apiKey"]))
-                .Append("</label><input type=\"password\" id=\"apikey\" name=\"apikey\" autocomplete=\"off\" required />")
+                .Append(HtmlPage.Escape(translations.Language)).Append("\"><label for=\"username\">")
+                .Append(HtmlPage.Escape(translations["userSettings.label.username"]))
+                .Append("</label><input id=\"username\" name=\"username\" type=\"text\" autocomplete=\"username\" required />")
+                .Append("<label for=\"password\">").Append(HtmlPage.Escape(translations["userSettings.label.password"]))
+                .Append("</label><input type=\"password\" id=\"password\" name=\"password\" autocomplete=\"current-password\" required />")
                 .Append("<button type=\"submit\">").Append(HtmlPage.Escape(translations["userSettings.button.continue"]))
                 .Append("</button></form></fieldset>");
         }

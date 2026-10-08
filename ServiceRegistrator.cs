@@ -64,6 +64,14 @@ public class ServiceRegistrator : IPluginServiceRegistrator
         {
             AllowAutoRedirect = false
         });
+        serviceCollection.AddHttpClient(FileService.DownloadClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(30);
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            // Redirects are followed and re-validated by FileService itself.
+            AllowAutoRedirect = false
+        });
         serviceCollection.AddSingleton(sp => new JellyfinIdentityVerifier(
             sp.GetRequiredService<IHttpClientFactory>(),
             $"http://127.0.0.1:{LocalPort}"));
@@ -76,6 +84,7 @@ public class ServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<IUserDataManager, UserDataManager>();
         serviceCollection.AddSingleton<UserPageSession>();
         serviceCollection.AddSingleton<IUserLibraryService, UserLibraryService>();
+        serviceCollection.AddSingleton<IStorageGuard, StorageGuard>();
         serviceCollection.AddSingleton<IDownloadQueue, DownloadQueue>();
         serviceCollection.AddSingleton<IFileService, FileService>();
         serviceCollection.AddSingleton<IWatchlistDownloadService, WatchlistDownloadService>();

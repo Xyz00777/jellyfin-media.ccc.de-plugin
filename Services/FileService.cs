@@ -14,14 +14,25 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
     {
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly ILogger<FileService> _logger;
+        private readonly IStorageGuard _storageGuard;
         private const int BufferSize = 65536;
-        private const string HttpClientName = "MediaCccApi";
+        private const int FreeSpaceRecheckBytes = 64 * 1024 * 1024;
+        private const int MaxRedirects = 5;
+
+        // Deliberately not the "MediaCccApi" client: that one advertises
+        // Accept: application/json, and cdn.media.ccc.de answers such a request with a JSON
+        // file descriptor instead of the recording, which was then saved as the download.
+        internal const string DownloadClientName = "MediaCccDownload";
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new(StringComparer.OrdinalIgnoreCase);
 
-        public FileService(IHttpClientFactory httpClientFactory, ILogger<FileService> logger)
+        public FileService(
+            IHttpClientFactory httpClientFactory,
+            ILogger<FileService> logger,
+            IStorageGuard? storageGuard = null)
         {
             _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _storageGuard = storageGuard ?? new StorageGuard();
         }
 
         private SemaphoreSlim GetFileLock(string destinationPath)
@@ -93,11 +104,83 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             return false;
         }
 
+        /// <summary>
+        /// Issues the request and follows CDN redirects itself.
+        /// </summary>
+        /// <remarks>
+        /// cdn.media.ccc.de answers with a 302 to whichever regional mirror is closest, so a
+        /// client that refuses redirects can never reach the bytes. Automatic following is
+        /// off on this handler, which means each hop is re-validated here: an untrusted
+        /// server could otherwise redirect the plugin at a private address.
+        /// </remarks>
+        private static async Task<HttpResponseMessage> SendFollowingRedirectsAsync(
+            HttpClient httpClient,
+            string url,
+            CancellationToken cancellationToken)
+        {
+            var current = url;
+
+            for (var hop = 0; hop <= MaxRedirects; hop++)
+            {
+                await RemoteUrlValidator.ValidatePublicHttpsUrlAsync(current, cancellationToken).ConfigureAwait(false);
+
+                using var request = new HttpRequestMessage(HttpMethod.Get, current);
+                var response = await httpClient
+                    .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (!IsRedirect(response.StatusCode))
+                {
+                    return response;
+                }
+
+                var location = response.Headers.Location;
+                response.Dispose();
+
+                if (location is null)
+                {
+                    throw new HttpRequestException("Redirect response without a location header.");
+                }
+
+                current = location.IsAbsoluteUri
+                    ? location.AbsoluteUri
+                    : new Uri(new Uri(current), location).AbsoluteUri;
+            }
+
+            throw new HttpRequestException($"Exceeded {MaxRedirects} redirects while downloading {url}.");
+        }
+
+        private static bool IsRedirect(HttpStatusCode statusCode) =>
+            statusCode is HttpStatusCode.MovedPermanently
+                or HttpStatusCode.Found
+                or HttpStatusCode.SeeOther
+                or HttpStatusCode.TemporaryRedirect
+                or HttpStatusCode.PermanentRedirect;
+
         private static void ValidateDestinationPath(string destinationPath)
         {
             if (destinationPath.Contains(".."))
             {
                 throw new ArgumentException("Destination path cannot contain path traversal sequences", nameof(destinationPath));
+            }
+        }
+
+        /// <summary>
+        /// Refuses the download when writing <paramref name="additionalBytes"/> would eat
+        /// into the free space the server keeps in reserve on that volume.
+        /// </summary>
+        private void EnsureRoomFor(long additionalBytes, string destinationPath)
+        {
+            var available = _storageGuard.GetAvailableBytes(destinationPath);
+            if (available == long.MaxValue)
+            {
+                return;
+            }
+
+            if (available - additionalBytes <= DownloadLimits.ReservedFreeSpaceBytes)
+            {
+                throw new DownloadQuotaExceededException(
+                    $"Only {available} bytes are free, so this download would leave less than the {DownloadLimits.ReservedFreeSpaceBytes} bytes the server keeps in reserve.");
             }
         }
 
@@ -129,8 +212,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             await fileLock.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var httpClient = _httpClientFactory.CreateClient(HttpClientName);
-                var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                var httpClient = _httpClientFactory.CreateClient(DownloadClientName);
+                var response = await SendFollowingRedirectsAsync(httpClient, url, cancellationToken).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
                 {
                     throw new HttpRequestException($"HTTP request failed with status code {response.StatusCode}");
@@ -139,6 +222,15 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 var totalBytes = response.Content.Headers.ContentLength ?? -1;
                 var downloadedBytes = 0L;
                 var lastReportedProgress = 0.0;
+                long nextFreeSpaceCheck = FreeSpaceRecheckBytes;
+
+                if (totalBytes > DownloadLimits.MaxRecordingBytes)
+                {
+                    throw new DownloadQuotaExceededException(
+                        $"This recording is {totalBytes} bytes, which exceeds the {DownloadLimits.MaxRecordingBytes} byte limit per download.");
+                }
+
+                EnsureRoomFor(totalBytes > 0 ? totalBytes : 0, destinationPath);
 
                 await using var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize, FileOptions.Asynchronous);
                 await using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
@@ -149,8 +241,23 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
                 while ((bytesRead = await contentStream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
                 {
-                    await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
                     downloadedBytes += bytesRead;
+
+                    // The declared length can be absent or wrong, so the cap and the
+                    // free-space reserve are enforced against the bytes actually received.
+                    if (downloadedBytes > DownloadLimits.MaxRecordingBytes)
+                    {
+                        throw new DownloadQuotaExceededException(
+                            $"This recording exceeds the {DownloadLimits.MaxRecordingBytes} byte limit per download.");
+                    }
+
+                    if (downloadedBytes >= nextFreeSpaceCheck)
+                    {
+                        EnsureRoomFor(0, destinationPath);
+                        nextFreeSpaceCheck = downloadedBytes + FreeSpaceRecheckBytes;
+                    }
+
+                    await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
 
                     if (totalBytes > 0 && progress != null)
                     {
@@ -198,7 +305,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             cancellationToken.ThrowIfCancellationRequested();
             await RemoteUrlValidator.ValidatePublicHttpsUrlAsync(url, cancellationToken).ConfigureAwait(false);
 
-            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+            var httpClient = _httpClientFactory.CreateClient(DownloadClientName);
             var request = new HttpRequestMessage(HttpMethod.Head, url);
             var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)

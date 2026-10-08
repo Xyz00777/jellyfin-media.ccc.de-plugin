@@ -5,6 +5,7 @@ using Jellyfin.Plugin.MediaCccDe.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using IUserManager = MediaBrowser.Controller.Library.IUserManager;
 
 namespace Jellyfin.Plugin.MediaCccDe.Controllers
 {
@@ -16,15 +17,18 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         private readonly JellyfinIdentityVerifier _identityVerifier;
         private readonly SettingsAccessTokenStore _tokenStore;
         private readonly IUserDataManager _userDataManager;
+        private readonly IUserManager _userManager;
 
         public UserSettingsController(
             JellyfinIdentityVerifier identityVerifier,
             SettingsAccessTokenStore tokenStore,
-            IUserDataManager userDataManager)
+            IUserDataManager userDataManager,
+            IUserManager userManager)
         {
             _identityVerifier = identityVerifier ?? throw new ArgumentNullException(nameof(identityVerifier));
             _tokenStore = tokenStore ?? throw new ArgumentNullException(nameof(tokenStore));
             _userDataManager = userDataManager ?? throw new ArgumentNullException(nameof(userDataManager));
+            _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
         }
 
         [HttpGet("")]
@@ -55,10 +59,17 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
         {
             var language = PluginLanguage.Resolve(Request);
             var translations = Translations.For(language);
-            var token = await _tokenStore.GetAsync(cancellationToken).ConfigureAwait(false);
-            var apiKey = Request.Form["apikey"].ToString();
 
-            var identity = await _identityVerifier.VerifyAsync(apiKey, cancellationToken).ConfigureAwait(false);
+            if (!CredentialTransportGuard.AllowsCredentialSubmission(Request))
+            {
+                return StatusCode(StatusCodes.Status426UpgradeRequired, translations["userSettings.error.httpsRequired"]);
+            }
+
+            var token = await _tokenStore.GetAsync(cancellationToken).ConfigureAwait(false);
+            var username = Request.Form["username"].ToString();
+            var password = Request.Form["password"].ToString();
+
+            var identity = await _identityVerifier.VerifyAsync(username, password, cancellationToken).ConfigureAwait(false);
             if (identity is null)
             {
                 return Content(
@@ -85,7 +96,7 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
                 {
                     HttpOnly = true,
                     SameSite = SameSiteMode.Strict,
-                    Secure = Request.IsHttps,
+                    Secure = true,
                     Expires = DateTimeOffset.UtcNow.AddDays(90)
                 });
 
@@ -132,6 +143,11 @@ namespace Jellyfin.Plugin.MediaCccDe.Controllers
             var signer = new UserCookieSigner(token);
 
             if (!signer.Validate(cookie, DateTimeOffset.UtcNow, out var userId))
+            {
+                return null;
+            }
+
+            if (!PluginUserAccess.IsActive(_userManager, userId))
             {
                 return null;
             }

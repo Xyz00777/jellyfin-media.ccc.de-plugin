@@ -195,7 +195,14 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
             var errorMessage = ex.Message;
             _logger.LogError(ex, "Download failed for event {EventGuid}: {Error}", item.EventGuid, errorMessage);
 
-            await CleanupFailedDownloadAsync(item, errorMessage).ConfigureAwait(false);
+            // A quota refusal is raised before the transfer opens its temporary file, so
+            // there is no partial download to remove. Deleting the destination anyway would
+            // throw away a copy that finished earlier under the same deterministic name.
+            if (ex is not DownloadQuotaExceededException)
+            {
+                await CleanupFailedDownloadAsync(item, errorMessage).ConfigureAwait(false);
+            }
+
             await _queue.MarkFailedAsync(item.Id, errorMessage).ConfigureAwait(false);
         }
 

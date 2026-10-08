@@ -45,19 +45,38 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
 
         public async Task EnqueueAsync(DownloadQueueItem item)
         {
+            ArgumentNullException.ThrowIfNull(item);
             await EnsureInitializedAsync().ConfigureAwait(false);
             lock (_lock)
             {
                 var existingItem = _queue.Values.FirstOrDefault(i =>
                     i.EventGuid == item.EventGuid && i.UserId == item.UserId);
 
-                if (existingItem != null)
+                if (existingItem is not null && existingItem.Status != DownloadStatus.Failed)
                 {
-                    if (existingItem.Status != DownloadStatus.Failed)
-                    {
-                        return;
-                    }
+                    return;
+                }
 
+                // Enforced here rather than at the call sites so that every path into the
+                // queue is bounded: the authenticated API, the anonymous browse page, and
+                // the watchlist page all land in this method.
+                var activeForUser = _queue.Values.Count(i =>
+                    i.UserId == item.UserId && i.Status != DownloadStatus.Completed);
+                if (activeForUser >= DownloadLimits.MaxActiveItemsPerUser)
+                {
+                    throw new DownloadQuotaExceededException(
+                        $"This account already has {activeForUser} downloads queued, which is the limit of {DownloadLimits.MaxActiveItemsPerUser}.");
+                }
+
+                var activeTotal = _queue.Values.Count(i => i.Status != DownloadStatus.Completed);
+                if (activeTotal >= DownloadLimits.MaxActiveItemsTotal)
+                {
+                    throw new DownloadQuotaExceededException(
+                        $"The server has {activeTotal} downloads queued, which is the limit of {DownloadLimits.MaxActiveItemsTotal}. Try again once some finish.");
+                }
+
+                if (existingItem is not null)
+                {
                     _queue.Remove(existingItem.Id);
                 }
 
@@ -72,9 +91,29 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                 }
 
                 _queue[item.Id] = item;
+                EvictOldFinishedItems();
             }
 
             await PersistAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Drops the oldest finished items once more than the retention limit are kept, so
+        /// the queue file cannot grow without bound as downloads complete.
+        /// Caller must hold <see cref="_lock"/>.
+        /// </summary>
+        private void EvictOldFinishedItems()
+        {
+            var finished = _queue.Values
+                .Where(i => i.Status == DownloadStatus.Completed)
+                .OrderByDescending(i => i.UpdatedAt)
+                .ToList();
+
+            var excess = finished.Count - DownloadLimits.MaxRetainedFinishedItems;
+            for (var i = 0; i < excess; i++)
+            {
+                _queue.Remove(finished[DownloadLimits.MaxRetainedFinishedItems + i].Id);
+            }
         }
 
         public async Task<DownloadQueueItem?> DequeueAsync()
@@ -149,6 +188,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Services
                     item.Status = DownloadStatus.Completed;
                     item.UpdatedAt = DateTime.UtcNow;
                 }
+
+                EvictOldFinishedItems();
             }
 
             await PersistAsync().ConfigureAwait(false);
