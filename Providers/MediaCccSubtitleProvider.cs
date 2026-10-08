@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,6 +24,8 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
     public class MediaCccSubtitleProvider : ISubtitleProvider
     {
         internal const string SubtitleMimeType = "application/x-subrip";
+        internal const string SubtitleClientName = "CccSubtitles";
+        private const int MaxRedirects = 5;
         private const string AllowedSubtitleHostSuffix = ".media.ccc.de";
 
         private readonly IMediaCccApiClient _apiClient;
@@ -83,33 +86,97 @@ namespace Jellyfin.Plugin.MediaCccDe.Providers
 
         public async Task<SubtitleResponse?> GetSubtitles(string search, CancellationToken cancellationToken)
         {
+            var payload = await DownloadSubtitleAsync(search, cancellationToken).ConfigureAwait(false);
+            if (payload is null)
+            {
+                return null;
+            }
+
+            return new SubtitleResponse
+            {
+                Format = "srt",
+                Stream = payload,
+                Language = GuessLanguage(ExtractUrl(search)!)!
+            };
+        }
+
+        /// <summary>
+        /// media.ccc.de serves subtitles from a redirect to a community mirror, and the
+        /// shared API client refuses redirects, so the hops are followed here. The first
+        /// hop must stay on media.ccc.de; every later hop only has to be a public HTTPS
+        /// address, which still blocks a redirect into the private network.
+        /// </summary>
+        internal async Task<MemoryStream?> DownloadSubtitleAsync(string? search, CancellationToken cancellationToken)
+        {
             if (!IsAllowedSubtitleUrl(search))
             {
                 return null;
             }
 
             var url = ExtractUrl(search)!;
+            var httpClient = _httpClientFactory.CreateClient(SubtitleClientName);
 
-            await RemoteUrlValidator.ValidatePublicHttpsUrlAsync(url, cancellationToken).ConfigureAwait(false);
-
-            var httpClient = _httpClientFactory.CreateClient();
-            using var response = await httpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
+            for (var hop = 0; hop <= MaxRedirects; hop++)
             {
-                return null;
+                await RemoteUrlValidator
+                    .ValidatePublicHttpsUrlAsync(url, cancellationToken)
+                    .ConfigureAwait(false);
+
+                using var response = await httpClient
+                    .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (IsRedirect(response.StatusCode))
+                {
+                    var location = response.Headers.Location;
+                    if (location is null)
+                    {
+                        return null;
+                    }
+
+                    url = location.IsAbsoluteUri ? location.ToString() : new Uri(new Uri(url), location).ToString();
+
+                    if (hop == MaxRedirects || !IsSafeRedirectTarget(url))
+                    {
+                        return null;
+                    }
+
+                    continue;
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return null;
+                }
+
+                await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                var buffer = new MemoryStream();
+                await source.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
+                buffer.Position = 0;
+                return buffer;
             }
 
-            await using var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            var buffer = new MemoryStream();
-            await source.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
-            buffer.Position = 0;
+            return null;
+        }
 
-            return new SubtitleResponse
-            {
-                Format = "srt",
-                Stream = buffer,
-                Language = GuessLanguage(url)!
-            };
+        private static bool IsRedirect(HttpStatusCode statusCode)
+        {
+            return statusCode is HttpStatusCode.MovedPermanently
+                or HttpStatusCode.Found
+                or HttpStatusCode.SeeOther
+                or HttpStatusCode.TemporaryRedirect
+                or HttpStatusCode.PermanentRedirect;
+        }
+
+        /// <summary>
+        /// After the first hop the target is a community mirror rather than media.ccc.de,
+        /// so the host is not pinned. It must still be absolute HTTPS; the public-address
+        /// check in the download loop is what keeps this from reaching the private network.
+        /// </summary>
+        internal static bool IsSafeRedirectTarget(string? url)
+        {
+            return Uri.TryCreate(url, UriKind.Absolute, out var uri)
+                && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
         }
 
         internal static IEnumerable<Recording> FindSubtitles(EventDto? eventDto)

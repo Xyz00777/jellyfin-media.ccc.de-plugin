@@ -57,6 +57,13 @@ public class ServiceRegistrator : IPluginServiceRegistrator
         });
         serviceCollection.AddSingleton<ISyncLogger, SyncLogger>();
         serviceCollection.AddSingleton<PluginInstanceResolver, PluginInstanceResolver>();
+        serviceCollection.AddHttpClient(Providers.MediaCccSubtitleProvider.SubtitleClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AllowAutoRedirect = false
+        });
         serviceCollection.AddSingleton(sp => new JellyfinIdentityVerifier(
             sp.GetRequiredService<IHttpClientFactory>(),
             $"http://127.0.0.1:{LocalPort}"));

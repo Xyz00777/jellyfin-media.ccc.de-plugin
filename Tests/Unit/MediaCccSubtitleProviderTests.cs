@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -31,6 +32,69 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
                     new() { Language = "deu", RecordingUrl = "https://cdn.media.ccc.de/v/audio.mp3", CurrentMimeType = "audio/mpeg" }
                 }
             };
+        }
+
+        private sealed class RedirectHandler : System.Net.Http.HttpMessageHandler
+        {
+            private readonly HttpStatusCode _first;
+            private readonly Uri? _location;
+            private readonly HttpStatusCode _second;
+            private readonly string _body;
+
+            private int _redirectTimes = 1;
+
+            public RedirectHandler(HttpStatusCode first, Uri? location, HttpStatusCode second, string body)
+            {
+                _first = first;
+                _location = location;
+                _second = second;
+                _body = body;
+            }
+
+            public RedirectHandler RedirectingForever()
+            {
+                _redirectTimes = 99;
+                return this;
+            }
+
+            public List<string> Requests { get; } = new List<string>();
+
+            protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(
+                System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken)
+            {
+                Requests.Add(request.RequestUri!.ToString());
+
+                if (_location is not null && Requests.Count <= _redirectTimes)
+                {
+                    var moved = new System.Net.Http.HttpResponseMessage(_first);
+                    moved.Headers.Location = _location;
+                    return Task.FromResult(moved);
+                }
+
+                return Task.FromResult(new System.Net.Http.HttpResponseMessage(_second)
+                {
+                    Content = new System.Net.Http.StringContent(_body)
+                });
+            }
+        }
+
+        private sealed class SingleHandlerFactory : System.Net.Http.IHttpClientFactory
+        {
+            private readonly System.Net.Http.HttpMessageHandler _handler;
+
+            public SingleHandlerFactory(System.Net.Http.HttpMessageHandler handler) => _handler = handler;
+
+            public System.Net.Http.HttpClient CreateClient(string name) =>
+                new System.Net.Http.HttpClient(_handler, disposeHandler: false);
+        }
+
+        private static MediaCccSubtitleProvider BuildWithHandler(System.Net.Http.HttpMessageHandler handler)
+        {
+            var api = new Mock<IMediaCccApiClient>();
+            return new MediaCccSubtitleProvider(
+                api.Object,
+                new ConferenceScheduleCache(api.Object),
+                new SingleHandlerFactory(handler));
         }
 
         private static (MediaCccSubtitleProvider Provider, Mock<IMediaCccApiClient> Api) Build(EventDto? hydrated)
@@ -149,6 +213,74 @@ namespace Jellyfin.Plugin.MediaCccDe.Tests.Unit
 
             Assert.Equal(SrtUrl, MediaCccSubtitleProvider.ExtractUrl(hashed));
             Assert.True(MediaCccSubtitleProvider.IsAllowedSubtitleUrl(hashed));
+        }
+
+[Fact]
+        public async Task Download_follows_the_mirror_redirect()
+        {
+            // media.ccc.de 302s subtitles to a community mirror, and the shared API
+            // client refuses redirects, so without this the provider returns null and
+            // Jellyfin dereferences it.
+            var mirror = "https://mirror.selfnet.de/c3subtitles/congress/2023/a.srt";
+            var handler = new RedirectHandler(
+                HttpStatusCode.Found,
+                new Uri(mirror),
+                HttpStatusCode.OK,
+                "1\n00:00:01,000 --> 00:00:02,000\nhello\n");
+            var provider = BuildWithHandler(handler);
+
+            using var stream = await provider.DownloadSubtitleAsync(SrtUrl, CancellationToken.None);
+
+            Assert.NotNull(stream);
+            Assert.Equal(2, handler.Requests.Count);
+            Assert.Equal(mirror, handler.Requests[1]);
+        }
+
+        [Fact]
+        public async Task Download_returns_null_when_the_first_hop_is_not_media_ccc()
+        {
+            var handler = new RedirectHandler(HttpStatusCode.OK, null, HttpStatusCode.OK, "x");
+            var provider = BuildWithHandler(handler);
+
+            Assert.Null(await provider.DownloadSubtitleAsync("https://evil.example.com/a.srt", CancellationToken.None));
+            Assert.Empty(handler.Requests);
+        }
+
+        [Fact]
+        public async Task Download_refuses_a_redirect_into_the_private_network()
+        {
+            var handler = new RedirectHandler(
+                HttpStatusCode.Found,
+                new Uri("http://169.254.169.254/latest/meta-data"),
+                HttpStatusCode.OK,
+                "x");
+            var provider = BuildWithHandler(handler);
+
+            Assert.Null(await provider.DownloadSubtitleAsync(SrtUrl, CancellationToken.None));
+        }
+
+        [Fact]
+        public async Task Download_gives_up_after_too_many_redirects()
+        {
+            var handler = new RedirectHandler(
+                HttpStatusCode.Found,
+                new Uri("https://mirror.selfnet.de/loop.srt"),
+                HttpStatusCode.OK,
+                "x").RedirectingForever();
+            var provider = BuildWithHandler(handler);
+
+            Assert.Null(await provider.DownloadSubtitleAsync(SrtUrl, CancellationToken.None));
+            Assert.True(handler.Requests.Count <= 6);
+        }
+
+        [Theory]
+        [InlineData("https://mirror.selfnet.de/a.srt", true)]
+        [InlineData("http://mirror.selfnet.de/a.srt", false)]
+        [InlineData("relative/path.srt", false)]
+        [InlineData(null, false)]
+        public void Redirect_targets_must_be_absolute_https(string? url, bool expected)
+        {
+            Assert.Equal(expected, MediaCccSubtitleProvider.IsSafeRedirectTarget(url));
         }
 
         [Fact]
