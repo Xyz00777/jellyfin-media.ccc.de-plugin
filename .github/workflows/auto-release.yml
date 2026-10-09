@@ -45,7 +45,15 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "$TAG" ]]; then
-            echo "No new tag was created; nothing to publish."
+            echo "No release tag was resolved; nothing to publish."
+            exit 0
+          fi
+          # The tag is reported whether this run pushed it or an earlier attempt did, so that
+          # a re-run can still publish after a dispatch failure. Only an existing release
+          # means there is nothing left to do; checking the tag instead would skip the retry
+          # and rebuild every published release on every merge to main.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; nothing to publish."
             exit 0
           fi
           # A tag pushed with GITHUB_TOKEN does not start a workflow run, so the

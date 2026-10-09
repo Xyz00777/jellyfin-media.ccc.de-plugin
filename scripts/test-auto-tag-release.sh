@@ -61,13 +61,14 @@ else
     fail "an untagged version is tagged, pushed, and reported"
 fi
 
-# 2. Running again on the same commit must not move or re-create the tag.
-output="$(cd "$root" && bash scripts/auto-tag-release.sh 2>&1)"
+# 2. Running again must not move or re-create the tag, but it must still report the tag so a
+#    re-run can recover from a dispatch that failed after the tag was pushed.
+output="$(cd "$root" && GITHUB_OUTPUT="$root/gh_output2" bash scripts/auto-tag-release.sh 2>&1)"
 rc=$?
-if [[ $rc -eq 0 && "$output" == *"already exists"* ]]; then
-    pass "an already tagged version is a no-op"
+if [[ $rc -eq 0 && "$output" == *"already exists"* && "$(cat "$root/gh_output2")" == "tag=v1.2.3" ]]; then
+    pass "an already tagged version is left alone and still reported"
 else
-    fail "an already tagged version is a no-op"
+    fail "an already tagged version is left alone and still reported"
 fi
 rm -rf "$root"
 
@@ -149,6 +150,22 @@ if [[ $rc -eq 0 && "$tagger" == "github-actions" ]]; then
     pass "a tag is attributed with no ambient git identity"
 else
     fail "a tag is attributed with no ambient git identity"
+fi
+rm -rf "$root"
+
+# 9. Regression: a dispatch that fails after the tag is pushed must be recoverable by a
+#    re-run. When the second run reported nothing, the retry published nothing and still
+#    exited 0, so the release silently never appeared.
+root="$(make_repo 1.2.9)"
+(cd "$root" && GITHUB_OUTPUT="$root/out1" bash scripts/auto-tag-release.sh >/dev/null 2>&1)
+first_rc=$?
+(cd "$root" && GITHUB_OUTPUT="$root/out2" bash scripts/auto-tag-release.sh >/dev/null 2>&1)
+second_rc=$?
+if [[ $first_rc -eq 0 && $second_rc -eq 0 &&
+    "$(cat "$root/out1")" == "tag=v1.2.9" && "$(cat "$root/out2")" == "tag=v1.2.9" ]]; then
+    pass "a re-run still reports the tag, so a failed dispatch is recoverable"
+else
+    fail "a re-run still reports the tag, so a failed dispatch is recoverable"
 fi
 rm -rf "$root"
 

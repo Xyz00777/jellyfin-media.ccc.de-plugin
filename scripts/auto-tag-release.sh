@@ -12,12 +12,14 @@ usage() {
 Usage: scripts/auto-tag-release.sh [--dry-run]
 
 Creates and pushes an annotated tag v<version> for the <Version> declared in
-Jellyfin.Plugin.MediaCccDe.csproj, unless that tag already exists.
+Jellyfin.Plugin.MediaCccDe.csproj, unless that tag already exists. An existing
+tag is never moved.
 
   --dry-run   Report what would happen without creating or pushing anything.
 
-Exits 0 without tagging when the version is already tagged, so the caller can treat
-"nothing to release" and "tag pushed" as the same successful outcome.
+The resolved tag is written to GITHUB_OUTPUT whether it was pushed now or was
+already present, so a re-run can still publish after a failed dispatch. Deciding
+whether a release is actually missing is left to the caller. Exits 0 either way.
 EOF
 }
 
@@ -66,8 +68,18 @@ tag_exists() {
     esac
 }
 
+# Reported whether this script pushed the tag or found it already there. An earlier attempt
+# may have pushed the tag and then failed to dispatch, so the caller has to be able to publish
+# on a re-run; whether a release is still missing is the caller's decision, not this script's.
+report_tag() {
+    if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+        printf 'tag=%s\n' "$tag" >>"$GITHUB_OUTPUT"
+    fi
+}
+
 if tag_exists; then
-    printf '%s already exists; nothing to release.\n' "$tag"
+    report_tag
+    printf '%s already exists; leaving it where it is.\n' "$tag"
     exit 0
 fi
 
@@ -84,7 +96,4 @@ git -c user.name=github-actions -c user.email=github-actions@users.noreply.githu
     tag -a "$tag" -m "Release $tag" HEAD
 git push origin "refs/tags/$tag"
 printf 'Created and pushed %s at %s\n' "$tag" "$(git rev-parse --short HEAD)"
-
-if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-    printf 'tag=%s\n' "$tag" >>"$GITHUB_OUTPUT"
-fi
+report_tag
