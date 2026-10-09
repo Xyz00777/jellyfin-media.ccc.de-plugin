@@ -1,0 +1,61 @@
+name: Auto-tag release
+
+# Tagging is deliberately not triggered by the push to main itself. That would race the
+# build: a tag could be pushed, and a release published, from a commit whose checks had not
+# passed yet. Waiting for the push-triggered build to finish is what keeps a release from
+# shipping without the code it was cut for.
+on:
+  workflow_run:
+    workflows: ["Build and test"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  # Pushing the tag needs contents: write; dispatching release.yml needs actions: write.
+  # Declaring one does not imply the other, and an omitted scope is set to none, so a
+  # missing actions: write makes the dispatch fail after the tag is already pushed.
+  contents: write
+  actions: write
+
+concurrency:
+  group: auto-tag-${{ github.repository }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the commit that passed
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Create and push the release tag
+        id: tag
+        run: bash scripts/auto-tag-release.sh
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$TAG" ]]; then
+            echo "No release tag was resolved; nothing to publish."
+            exit 0
+          fi
+          # The tag is reported whether this run pushed it or an earlier attempt did, so that
+          # a re-run can still publish after a dispatch failure. Only an existing release
+          # means there is nothing left to do; checking the tag instead would skip the retry
+          # and rebuild every published release on every merge to main.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; nothing to publish."
+            exit 0
+          fi
+          # A tag pushed with GITHUB_TOKEN does not start a workflow run, so the
+          # tag-triggered publish has to be dispatched by hand.
+          gh workflow run release.yml -f "tag=$TAG"
