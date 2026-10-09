@@ -62,6 +62,8 @@ Two consequences worth knowing:
 
   Add `[no-release]` to the commit message to opt out. CI cannot be given an environment variable by a contributor, so the commit message is the opt-out that works there; it also keeps the decision in the reviewed history rather than in an invisible job setting.
 
+Because the marker travels in a commit message, keep it when merging. A merge commit and a rebase both preserve it, and so does GitHub's default squash message, which lists the individual commits. A squash whose message you edit down to the pull request title alone drops the marker, and the guard then fails on `main` — visibly, on the merge itself, rather than silently.
+
 Because the guard reads git tags, CI checks out full history (`fetch-depth: 0`); a shallow clone has no tags and the guard would pass on every run. `bash scripts/test-check-version.sh` exercises the guard against throwaway repositories and runs in CI.
 
 Run it by hand any time with:
