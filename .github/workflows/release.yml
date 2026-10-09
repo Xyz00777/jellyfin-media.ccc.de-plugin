@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - 'v*'
+  # A tag pushed with GITHUB_TOKEN does not start a workflow run, so the auto-tag workflow
+  # cannot rely on the trigger above. workflow_dispatch is one of the two events GitHub
+  # exempts from that rule, so it dispatches this workflow with the tag as an explicit input
+  # rather than depending on how a dispatched run resolves GITHUB_REF_NAME.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to publish, for example v1.2.3'
+        required: true
+        type: string
 
 concurrency:
   group: release-${{ github.repository }}-${{ github.ref }}
@@ -18,6 +28,9 @@ jobs:
       - name: Check out full history for release metadata
         uses: actions/checkout@v4
         with:
+          # A dispatched run checks out the default branch unless told otherwise, which would
+          # build main while publishing it under a tag that points somewhere else.
+          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
 
       - name: Set up .NET 10 SDK
@@ -43,12 +56,21 @@ jobs:
           dotnet test Jellyfin.Plugin.MediaCccDe.sln --configuration Release --no-build
         shell: bash
 
+      - name: Resolve the release tag
+        run: |
+          set -euo pipefail
+          # Set explicitly for a dispatch so the rest of the workflow never has to know how
+          # a dispatched run resolves GITHUB_REF_NAME.
+          RELEASE_TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+        shell: bash
+
       - name: Validate tag, plugin versions, and Jellyfin ABI
         run: |
           set -euo pipefail
           # Single source of truth, shared with the pre-commit hook and CI.
           # EXPECTED_VERSION pins the check to the tag being released.
-          EXPECTED_VERSION="${GITHUB_REF_NAME#v}" bash scripts/check-version.sh
+          EXPECTED_VERSION="${RELEASE_TAG#v}" bash scripts/check-version.sh
           VERSION="$(sed -nE 's/^[[:space:]]*<Version>([^<]+)<\/Version>.*/\1/p' Jellyfin.Plugin.MediaCccDe.csproj | head -n1)"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "CONTROLLER_VERSION=$(jq -r '.targetAbi' meta.json)" >> "$GITHUB_ENV"
@@ -99,7 +121,7 @@ jobs:
 
       - name: Generate Jellyfin plugin repository manifest
         env:
-          ASSET_URL: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/media-ccc-de-plugin-${{ env.VERSION }}.zip
+          ASSET_URL: https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/media-ccc-de-plugin-${{ env.VERSION }}.zip
           ZIP_PATH: dist/media-ccc-de-plugin-${{ env.VERSION }}.zip
           OUTPUT_PATH: dist/manifest.json
         run: |
@@ -109,7 +131,7 @@ jobs:
           bash scripts/generate-manifest.sh "$VERSION" "$ASSET_URL" "$ZIP_PATH"
           # The URL a user pastes into Dashboard > Plugins > Repositories. A
           # raw.githubusercontent tag URL 404s: the manifest is a release asset, not committed.
-          echo "manifest_url: https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/manifest.json" >> "$GITHUB_STEP_SUMMARY"
+          echo "manifest_url: https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/manifest.json" >> "$GITHUB_STEP_SUMMARY"
         shell: bash
 
       - name: Publish GitHub Release with generated notes
@@ -117,11 +139,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo "GitHub Release for '$GITHUB_REF_NAME' already exists; skipping publish."
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "GitHub Release for '$RELEASE_TAG' already exists; skipping publish."
             exit 0
           fi
-          gh release create "$GITHUB_REF_NAME" "dist/media-ccc-de-plugin-${VERSION}.zip" "dist/manifest.json" \
+          gh release create "$RELEASE_TAG" "dist/media-ccc-de-plugin-${VERSION}.zip" "dist/manifest.json" \
             --title "Media.CCC.de v${VERSION} (Jellyfin ${CONTROLLER_VERSION}+)" \
             --generate-notes
         shell: bash

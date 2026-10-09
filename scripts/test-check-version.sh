@@ -158,7 +158,48 @@ else
 fi
 rm -rf "$root4"
 
-# 8. Bumping the version clears the guard.
+# 8. Reproduce a push to main. HEAD is GitHub's merge commit, origin/main already points at
+#    it, and the [no-release] marker sits on a commit the merge brought in. Without the base
+#    SHA from CI the marker is invisible and the guard turns main red.
+root5="$(make_repo 1.3.3)"
+git -C "$root5" tag -a v1.3.3 -m "v1.3.3"
+push_base="$(git -C "$root5" rev-parse HEAD)"
+git -C "$root5" checkout -q -b work
+printf 'ci\n' >> "$root5/meta.json.changelog-marker"
+git -C "$root5" add -A
+git -C "$root5" commit -q -m "ci: only tooling [no-release]"
+git -C "$root5" checkout -q -b mergedmain "$push_base"
+git -C "$root5" merge -q --no-ff -m "Merge pull request #9 from example/branch" work
+merged_sha="$(git -C "$root5" rev-parse HEAD)"
+git -C "$root5" update-ref refs/remotes/origin/main "$merged_sha"
+if [[ -z "$(git -C "$root5" log --format=%s origin/main..HEAD)" ]]; then
+    if run_check "$root5" SKIP_RELEASE_GUARD= RELEASE_GUARD_HEAD_SHA="$merged_sha" RELEASE_GUARD_BASE_SHA="$push_base"; then
+        pass "a [no-release] commit merged into main still opts out"
+    else
+        fail "a [no-release] commit merged into main still opts out"
+    fi
+    if run_check "$root5" SKIP_RELEASE_GUARD= RELEASE_GUARD_HEAD_SHA="$merged_sha"; then
+        fail "without the base SHA the merged marker is missed and main goes red"
+    else
+        pass "without the base SHA the merged marker is missed and main goes red"
+    fi
+else
+    fail "the push-to-main fixture did not reproduce"
+fi
+rm -rf "$root5"
+
+# 9. An all-zero base SHA (a branch creation push) is ignored instead of failing the check.
+root6="$(make_repo 1.3.4)"
+git -C "$root6" tag -a v1.3.4 -m "v1.3.4"
+add_unversioned_change "$root6"
+if run_check "$root6" SKIP_RELEASE_GUARD= RELEASE_GUARD_BASE_SHA=0000000000000000000000000000000000000000; then
+    fail "an unusable base SHA does not mask a real guard failure"
+else
+    pass "an unusable base SHA does not mask a real guard failure"
+fi
+rm -rf "$root6"
+
+# 10. Bumping the version clears the guard.
 bump_version "$root" 1.2.4
 if run_check "$root" SKIP_RELEASE_GUARD=; then
     pass "bumping the version clears the guard"
@@ -166,7 +207,7 @@ else
     fail "bumping the version clears the guard"
 fi
 
-# 9. The release path is unaffected: EXPECTED_VERSION still pins the tag to the version.
+# 11. The release path is unaffected: EXPECTED_VERSION still pins the tag to the version.
 if run_check "$root" EXPECTED_VERSION=1.2.4; then
     pass "EXPECTED_VERSION matching the project version passes"
 else

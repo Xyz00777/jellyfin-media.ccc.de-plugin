@@ -19,11 +19,18 @@ jobs:
       - name: Check plugin and Jellyfin versions
         env:
           # A pull_request checkout lands on a synthetic merge commit, so the release
-          # guard reads the branch tip the pull request actually proposes.
-          RELEASE_GUARD_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # guard reads the branch tip the pull request actually proposes. On a push to
+          # main, HEAD is the real merge commit and origin/main already points at it,
+          # so the guard also needs the SHA the push started from to see the commits the
+          # merge brought in. Without both, a [no-release] opt-out on the merged branch
+          # is invisible and every merge of one turns main red.
+          RELEASE_GUARD_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RELEASE_GUARD_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: bash scripts/check-version.sh
       - name: Test the release guard
         run: bash scripts/test-check-version.sh
+      - name: Test the auto-tag release script
+        run: bash scripts/test-auto-tag-release.sh
       - name: Check whitespace and final newlines
         run: sh scripts/check-whitespace.sh
       - uses: actions/setup-dotnet@v4
