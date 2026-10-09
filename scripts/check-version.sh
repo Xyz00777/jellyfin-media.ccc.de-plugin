@@ -87,5 +87,38 @@ if [[ -n "${EXPECTED_VERSION:-}" && "$EXPECTED_VERSION" != "$project_version" ]]
     die "release tag mismatch: EXPECTED_VERSION='$EXPECTED_VERSION' but $CSPROJ <Version>='$project_version'; update the project version or build the matching tag."
 fi
 
+# The release workflow is tag-triggered, so merging to main publishes nothing and nothing
+# else in this file can tell a released version from a pending one. Without this, code
+# carrying security fixes merged while the tag for its version already pointed at older
+# code, leaving the published release without those fixes and no failing check anywhere.
+# A tag sitting on the current commit is fine: that release does contain this code.
+if [[ -z "${EXPECTED_VERSION:-}" ]] && command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
+    tagged_commit="$(git rev-parse -q --verify "refs/tags/v${project_version}^{commit}" 2>/dev/null || true)"
+    head_commit="$(git rev-parse -q --verify HEAD 2>/dev/null || true)"
+    if [[ -n "$tagged_commit" && "$tagged_commit" != "$head_commit" ]]; then
+        # CI cannot be handed an environment variable by a contributor, so the commit
+        # message carries the opt-out for a change that must not need one. It ends up in
+        # the reviewed history instead of being an invisible job setting.
+        skip_reason="${SKIP_RELEASE_GUARD:+environment}"
+        if [[ -z "$skip_reason" ]]; then
+            # A pull_request checkout lands on a synthetic merge commit whose message is
+            # "Merge ... into ...", so the marker has to be read from the branch tip that
+            # CI passes in, or from any commit the pull request adds.
+            marker_commit="${RELEASE_GUARD_HEAD_SHA:-HEAD}"
+            if git log -1 --format=%B "$marker_commit" 2>/dev/null | grep -qi '\[no-release\]' \
+                || git log --format=%B "origin/main..$marker_commit" 2>/dev/null | grep -qi '\[no-release\]'; then
+                skip_reason='[no-release] in the commit message'
+            fi
+        fi
+
+        if [[ -n "$skip_reason" ]]; then
+            printf 'Release guard skipped via %s: v%s is already published and %s does not bump the version.\n' \
+                "$skip_reason" "$project_version" "${head_commit:0:7}" >&2
+        else
+            die "version ${project_version} is already published as tag v${project_version} from $(git rev-parse --short "refs/tags/v${project_version}^{commit}"): bump <Version> in $CSPROJ and version in $META so these changes ship in a new release, or add [no-release] to the commit message for a change that does not need one."
+        fi
+    fi
+fi
+
 printf 'Version check passed: plugin %s (%s)\n' "$project_version" "$meta_version"
 printf 'Jellyfin targetAbi %s matches Jellyfin.Controller %s.\n' "$target_abi" "$controller_version"

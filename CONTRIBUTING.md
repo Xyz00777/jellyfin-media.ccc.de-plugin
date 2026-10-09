@@ -35,7 +35,24 @@ Pushing the tag triggers `.github/workflows/release.yml`, which validates the ta
 - **CI** — as the first step of `.github/workflows/ci.yml`
 - **releases** — `.github/workflows/release.yml`, with `EXPECTED_VERSION` pinned to the tag
 
-It verifies that `meta.json`'s `version` matches the `.csproj` `<Version>` (allowing one trailing `.0`, since the manifest uses Jellyfin's four-part format) and that `targetAbi` matches the `Jellyfin.Controller` package version. Run it by hand any time with:
+It verifies that `meta.json`'s `version` matches the `.csproj` `<Version>` (allowing one trailing `.0`, since the manifest uses Jellyfin's four-part format) and that `targetAbi` matches the `Jellyfin.Controller` package version.
+
+It also enforces the **release guard**: if the project version already has a tag pointing at a different commit, the check fails. Merging to `main` publishes nothing, because the release workflow is tag-triggered, so nothing else distinguishes a version that is already released from one that is still pending. Without this guard, changes can merge while the release for their version was built from older code, and every check stays green.
+
+Two consequences worth knowing:
+
+- **A tag on the current commit is allowed.** After tagging, the released artifact does contain that code, so the check still passes until you add another commit.
+- **Every later change needs a version bump.** Once a version is released, the next change to `main` must bump `<Version>` and `version`, or opt out for something that genuinely does not need a release, such as a documentation-only or CI-only change. Two opt-outs exist and both print a notice naming which one was used:
+
+  ```bash
+  SKIP_RELEASE_GUARD=1 bash scripts/check-version.sh   # locally
+  ```
+
+  Add `[no-release]` to the commit message to opt out. CI cannot be given an environment variable by a contributor, so the commit message is the opt-out that works there; it also keeps the decision in the reviewed history rather than in an invisible job setting.
+
+Because the guard reads git tags, CI checks out full history (`fetch-depth: 0`); a shallow clone has no tags and the guard would pass on every run. `bash scripts/test-check-version.sh` exercises the guard against throwaway repositories and runs in CI.
+
+Run it by hand any time with:
 
 ```bash
 bash scripts/check-version.sh
