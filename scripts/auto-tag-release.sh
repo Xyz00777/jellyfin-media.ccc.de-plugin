@@ -78,7 +78,10 @@ fi
 
 # Never --force: an existing tag is left alone by the check above, so a push here can only
 # ever add a ref. A moved tag would silently change what an already-published release is.
-git tag -a "$tag" -m "Release $tag" HEAD
+# The identity is supplied per command because an annotated tag needs a tagger, and relying
+# on the runner's global git config would fail on any runner that does not set one.
+git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com \
+    tag -a "$tag" -m "Release $tag" HEAD
 git push origin "refs/tags/$tag"
 printf 'Created and pushed %s at %s\n' "$tag" "$(git rev-parse --short HEAD)"
 

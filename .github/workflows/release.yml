@@ -57,11 +57,14 @@ jobs:
         shell: bash
 
       - name: Resolve the release tag
+        env:
+          # A workflow_dispatch input is guaranteed in the inputs context, not as a bare
+          # INPUT_TAG variable. Mapping it explicitly means the rest of the workflow never
+          # has to know how a dispatched run resolves GITHUB_REF_NAME.
+          DISPATCH_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          # Set explicitly for a dispatch so the rest of the workflow never has to know how
-          # a dispatched run resolves GITHUB_REF_NAME.
-          RELEASE_TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          RELEASE_TAG="${DISPATCH_TAG:-$GITHUB_REF_NAME}"
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
         shell: bash
 

@@ -137,5 +137,20 @@ else
 fi
 rm -rf "$root"
 
+# 8. An annotated tag needs a tagger identity, and a CI runner is not guaranteed to have one
+#    in its global git config. The tag must be attributed without relying on the environment.
+root="$(make_repo 1.2.8)"
+git -C "$root" config --unset user.name 2>/dev/null || true
+git -C "$root" config --unset user.email 2>/dev/null || true
+output="$(cd "$root" && env HOME="$root" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 bash scripts/auto-tag-release.sh 2>&1)"
+rc=$?
+tagger="$(git -C "$root" for-each-ref --format='%(taggername)' refs/tags/v1.2.8)"
+if [[ $rc -eq 0 && "$tagger" == "github-actions" ]]; then
+    pass "a tag is attributed with no ambient git identity"
+else
+    fail "a tag is attributed with no ambient git identity"
+fi
+rm -rf "$root"
+
 printf '\n%d checks, %d failures\n' "$checks" "$failures"
 [[ "$failures" -eq 0 ]]
