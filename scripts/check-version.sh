@@ -101,12 +101,17 @@ if [[ -z "${EXPECTED_VERSION:-}" ]] && command -v git >/dev/null 2>&1 && git rev
         # the reviewed history instead of being an invisible job setting.
         skip_reason="${SKIP_RELEASE_GUARD:+environment}"
         if [[ -z "$skip_reason" ]]; then
-            # A pull_request checkout lands on a synthetic merge commit whose message is
-            # "Merge ... into ...", so the marker has to be read from the branch tip that
-            # CI passes in, or from any commit the pull request adds.
             marker_commit="${RELEASE_GUARD_HEAD_SHA:-HEAD}"
-            if git log -1 --format=%B "$marker_commit" 2>/dev/null | grep -qi '\[no-release\]' \
-                || git log --format=%B "origin/main..$marker_commit" 2>/dev/null | grep -qi '\[no-release\]'; then
+            if git log -1 --format=%B "$marker_commit" 2>/dev/null | grep -qi '\[no-release\]'; then
+                skip_reason='[no-release] in the commit message'
+            fi
+            # On a push to main, HEAD is GitHub's merge commit and origin/main already points
+            # at it, so a range from origin/main is empty and a marker on the merged branch
+            # commit is invisible. CI passes the SHA the push started from instead.
+            marker_base="${RELEASE_GUARD_BASE_SHA:-}"
+            if [[ -z "$skip_reason" && -n "$marker_base" ]] &&
+                git rev-parse -q --verify "${marker_base}^{commit}" >/dev/null 2>&1 &&
+                git log --format=%B "${marker_base}..${marker_commit}" 2>/dev/null | grep -qi '\[no-release\]'; then
                 skip_reason='[no-release] in the commit message'
             fi
         fi

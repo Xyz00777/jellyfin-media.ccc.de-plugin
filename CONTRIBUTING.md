@@ -16,16 +16,28 @@ The root `.editorconfig` records the existing C# layout and whitespace conventio
 
 ## Releasing
 
-To cut a release, bump `<Version>` in `Jellyfin.Plugin.MediaCccDe.csproj` and `"version"` in `meta.json` (the csproj uses three parts, such as `1.1.0`, while the manifest uses four, such as `1.1.0.0`). Update `"changelog"` in `meta.json` to describe the change. If the `Jellyfin.Controller` / `Jellyfin.Model` package versions change, update `"targetAbi"` in `meta.json` to match the `Jellyfin.Controller` version; a lower `targetAbi` can make Jellyfin accept the plugin and then disable it at load time.
+A release is cut automatically once a version bump merges to `main`. To release, bump `<Version>` in `Jellyfin.Plugin.MediaCccDe.csproj` and `"version"` in `meta.json` (the csproj uses three parts, such as `1.1.0`, while the manifest uses four, such as `1.1.0.0`). Update `"changelog"` in `meta.json` to describe the change. If the `Jellyfin.Controller` / `Jellyfin.Model` package versions change, update `"targetAbi"` in `meta.json` to match the `Jellyfin.Controller` version; a lower `targetAbi` can make Jellyfin accept the plugin and then disable it at load time.
 
-Commit the changes, then create and push a matching annotated tag:
+Open a pull request with that bump. After it merges:
+
+1. `Build and test` runs on `main`.
+2. `Auto-tag release` waits for that build to succeed, then creates and pushes an annotated `v<version>` tag at the merge commit using `scripts/auto-tag-release.sh`.
+3. It dispatches `.github/workflows/release.yml`, which validates the tag and manifest/project versions, runs the build and tests, refreshes the manifest timestamp, packages `dist/media-ccc-de-plugin-<version>.zip` with exactly `Jellyfin.Plugin.MediaCccDe.dll` and `meta.json`, and publishes it as a GitHub Release.
+
+Step 2 waits for step 1 instead of reacting to the push directly, because tagging on the push would race the build and could publish a release from a commit whose checks had not passed. That is the failure this repository already hit once: security fixes merged while the tag for their version pointed at older code, so the published release lacked them and every check stayed green.
+
+If the version already has a tag, `Auto-tag release` does nothing, so re-running it is harmless, and it never moves an existing tag.
+
+### Releasing by hand
+
+Disable the `Auto-tag release` workflow in the repository's **Actions** tab, then tag manually:
 
 ```bash
 git tag -a v<version> -m "Release <version>"
 git push origin v<version>
 ```
 
-Pushing the tag triggers `.github/workflows/release.yml`, which validates the tag and manifest/project versions, runs the build and tests, refreshes the manifest timestamp, packages `dist/media-ccc-de-plugin-<version>.zip` with exactly `Jellyfin.Plugin.MediaCccDe.dll` and `meta.json`, and publishes it as a GitHub Release. The workflow deliberately fails if the tag, csproj version, and manifest version disagree; fix the files rather than bypassing the check. It skips publishing if a GitHub Release for that tag already exists. The workflow rewrites `meta.json`'s `timestamp` inside the published artifact, so the timestamp in git and the timestamp in the shipped ZIP are not expected to match.
+Pushing the tag triggers `.github/workflows/release.yml` directly. The workflow deliberately fails if the tag, csproj version, and manifest version disagree; fix the files rather than bypassing the check. It skips publishing if a GitHub Release for that tag already exists. The workflow rewrites `meta.json`'s `timestamp` inside the published artifact, so the timestamp in git and the timestamp in the shipped ZIP are not expected to match.
 
 ## Version consistency
 
@@ -37,7 +49,7 @@ Pushing the tag triggers `.github/workflows/release.yml`, which validates the ta
 
 It verifies that `meta.json`'s `version` matches the `.csproj` `<Version>` (allowing one trailing `.0`, since the manifest uses Jellyfin's four-part format) and that `targetAbi` matches the `Jellyfin.Controller` package version.
 
-It also enforces the **release guard**: if the project version already has a tag pointing at a different commit, the check fails. Merging to `main` publishes nothing, because the release workflow is tag-triggered, so nothing else distinguishes a version that is already released from one that is still pending. Without this guard, changes can merge while the release for their version was built from older code, and every check stays green.
+It also enforces the **release guard**: if the project version already has a tag pointing at a different commit, the check fails. Merging to `main` is what triggers a release, and that release is built from a tag, so nothing else distinguishes a version that is already released from one that is still pending. Without this guard, changes can merge while the tag for their version already points at older code, so the published release lacks the change and every check stays green.
 
 Two consequences worth knowing:
 
@@ -49,6 +61,8 @@ Two consequences worth knowing:
   ```
 
   Add `[no-release]` to the commit message to opt out. CI cannot be given an environment variable by a contributor, so the commit message is the opt-out that works there; it also keeps the decision in the reviewed history rather than in an invisible job setting.
+
+Because the marker travels in a commit message, keep it when merging. A merge commit and a rebase both preserve it, and so does GitHub's default squash message, which lists the individual commits. A squash whose message you edit down to the pull request title alone drops the marker, and the guard then fails on `main` — visibly, on the merge itself, rather than silently.
 
 Because the guard reads git tags, CI checks out full history (`fetch-depth: 0`); a shallow clone has no tags and the guard would pass on every run. `bash scripts/test-check-version.sh` exercises the guard against throwaway repositories and runs in CI.
 
